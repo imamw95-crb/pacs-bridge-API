@@ -724,7 +724,8 @@ sudah aktif.
 
 > **Kode di-bake ke image** (`COPY . /var/www/html`). Mengekstrak tar ke `/opt/pacs-bridge`
 > tanpa `docker build` + recreate container **tidak** mengubah versi yang berjalan.
-> Verifikasi: `curl -s http://127.0.0.1/health | grep bridge_version` (harus `1.2.0`).
+> Verifikasi (dashboard publik, karena `/health` butuh login):
+> `curl -s http://127.0.0.1/dashboard | grep -o 'bridge-version" content="[^"]*'` (harus `1.2.0`).
 
 Script juga memperingatkan bila cron lama (30 menit, `orthanc-sync.sh`) masih ada — hapus manual
 agar tidak menarik dobel.

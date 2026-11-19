@@ -38,9 +38,11 @@ sudo docker ps --filter name=pacs-bridge --format '{{.Names}} | {{.Status}} | {{
 curl -s -o /dev/null -w "cek /dashboard (port 80) -> HTTP %{http_code}\n" http://127.0.0.1/dashboard
 
 echo "== verifikasi versi & API baru =="
-VER=$(curl -s http://127.0.0.1/health | sed -n 's/.*"bridge_version":"\([^"]*\)".*/\1/p')
+# /health butuh login, jadi versi dibaca dari <meta> di dashboard (publik)
+VER=$(curl -s http://127.0.0.1/dashboard | sed -n 's/.*name="bridge-version" content="\([^"]*\)".*/\1/p' | head -1)
 echo "bridge_version: ${VER:-tidak terdeteksi}"
-if curl -s http://127.0.0.1/audit | grep -q '"code":"UNAUTHORIZED"'; then
+# respons error dicetak ber-indentasi, jadi spasi dibuang dulu sebelum dicocokkan
+if curl -s http://127.0.0.1/audit | tr -d ' \n\t' | grep -q '"code":"UNAUTHORIZED"'; then
     echo "API baru aktif (error code + audit)"
 else
     echo "PERINGATAN: kode LAMA masih berjalan — image belum terbuild ulang / container belum dibuat ulang"

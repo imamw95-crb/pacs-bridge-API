@@ -59,9 +59,10 @@ Pasang `deploy/cron-pacs-notify` ke `/etc/cron.d/pacs-notify` (tiap menit) dan i
 
 ## Catatan
 
-- **Verifikasi deploy:** `curl -s http://127.0.0.1/health | grep bridge_version` harus menampilkan
-  versi terbaru (`1.2.0`), dan `curl -s http://127.0.0.1/audit` harus `401` dengan `"code":"UNAUTHORIZED"`.
-  `deploy.sh` mencetak hasil kedua cek ini otomatis.
+- **Verifikasi deploy:** `/health` butuh login, jadi versi dibaca dari dashboard (publik):
+  `curl -s http://127.0.0.1/dashboard | grep -o 'bridge-version" content="[^"]*'` harus menampilkan
+  versi terbaru (`1.2.0`). Lalu `curl -s http://127.0.0.1/audit` harus `401` dengan `"code":"UNAUTHORIZED"`
+  (respons ber-indentasi, jadi cocokkan setelah spasi dibuang). `deploy.sh` mencetak hasil kedua cek ini otomatis.
 - Kode di-bake ke image (`COPY . /var/www/html`) — mengekstrak tar ke `/opt/pacs-bridge` **tanpa**
   `docker build` + `docker rm -f`/`docker run` (yaitu tanpa `deploy.sh`) **tidak** mengubah yang berjalan.
 
