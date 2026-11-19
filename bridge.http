@@ -1,0 +1,56 @@
+### PACS Bridge — uji API key dengan REST Client (VS Code)
+### 1. Pilih environment di status bar REST Client: "live" (10.4.0.10) atau "local" (127.0.0.1:8081)
+### 2. Variabel baseUrl & apiKey diambil dari http-client.env.json (jangan di-commit)
+### 3. Klik "Send Request" di atas tiap blok
+
+@acc = A261105038
+
+### 1) Health — status Orthanc + status worklist
+GET {{baseUrl}}/health
+X-API-Key: {{apiKey}}
+
+### 2) Daftar worklist (order yang menunggu)
+GET {{baseUrl}}/worklists
+X-API-Key: {{apiKey}}
+
+### 3) Study hari ini (limit 5)
+GET {{baseUrl}}/studies/recent?date=today&limit=5
+X-API-Key: {{apiKey}}
+
+### 4) Cari study by accession
+GET {{baseUrl}}/studies?accession={{acc}}
+X-API-Key: {{apiKey}}
+
+### 5) Gambar JPEG by accession (respons biner)
+GET {{baseUrl}}/studies/{{acc}}/jpg?quality=90
+X-API-Key: {{apiKey}}
+
+### 6) Kirim order uji -> 201 Created
+# @name createOrder
+POST {{baseUrl}}/worklists
+X-API-Key: {{apiKey}}
+Content-Type: application/json
+
+{
+  "patient_name": "TES RESTCLIENT",
+  "title": "Tn.",
+  "patient_id": "TEST-RC-01",
+  "accession_number": "TESTRC261113",
+  "procedure": "THORAX PA"
+}
+
+### 7) Hapus order uji (id diambil dari respons request 6) — jalankan setelah request 6
+DELETE {{baseUrl}}/worklists/{{createOrder.response.body.$.id}}
+X-API-Key: {{apiKey}}
+
+### 8) Ubah pengaturan -> harus 403 dengan API key (sengaja diblokir)
+PUT {{baseUrl}}/settings
+X-API-Key: {{apiKey}}
+Content-Type: application/json
+
+{
+  "server_ip": "10.4.0.10"
+}
+
+### 9) Tanpa API key -> harus 401 (pakai environment "live-key-salah", atau hapus baris header)
+GET {{baseUrl}}/health

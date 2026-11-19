@@ -1,0 +1,26 @@
+# /etc/cron.d/pacs-pull — tarik study dari PACS sumber (SANTESRV1) ke Orthanc, tiap menit.
+#
+# Pasang:
+#   sudo cp /opt/pacs-bridge/deploy/cron-pacs-pull /etc/cron.d/pacs-pull
+#   sudo chown root:root /etc/cron.d/pacs-pull
+#   sudo chmod 644 /etc/cron.d/pacs-pull
+#
+# Sebelum itu matikan cron lama (30 menit) agar tidak menarik dobel:
+#   crontab -l | grep -i pull
+#   sudo grep -rl "pull\|SANTESRV" /etc/cron.d /etc/crontab /etc/cron.daily 2>/dev/null
+#
+# Versi yang dipakai: PHP di dalam container bridge (paling aman, tidak butuh php-cli di host).
+# Kalau host punya PHP CLI, ganti baris perintah dengan:
+#   pacs /usr/bin/php /opt/pacs-bridge/tools/pull-santesrv1.php --date=today --quiet
+#
+# Cek hasil: tail -f /var/log/pacs-pull.log
+#            curl -s "http://10.4.0.10:8042/jobs?expand" | head -c 400
+
+SHELL=/bin/sh
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# tiap menit: tarik study baru hari ini (--quiet: hanya log kalau ada study masuk / gagal)
+* * * * * root /usr/bin/docker exec -u www-data pacs-bridge /usr/local/bin/php /var/www/html/tools/pull-santesrv1.php --date=today --quiet >> /var/log/pacs-pull.log 2>&1
+
+# tiap jam menit ke-5: susulan study yang selesai lewat tengah malam
+5 * * * * root /usr/bin/docker exec -u www-data pacs-bridge /usr/local/bin/php /var/www/html/tools/pull-santesrv1.php --date=yesterday --quiet >> /var/log/pacs-pull.log 2>&1

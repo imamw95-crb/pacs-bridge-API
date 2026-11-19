@@ -1,0 +1,11 @@
+data/settings.json
+data/pull-windows.log
+data/*.lock
+http-client.env.json
+*.http
+*.tar.gz
+*.tmp
+.git
+.github
+node_modules
+vendor

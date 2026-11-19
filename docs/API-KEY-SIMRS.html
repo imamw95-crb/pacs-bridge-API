@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>API Key Bridge SIMRS ↔ Orthanc PACS — Panduan Integrasi</title>
+<style>
+  @page { size: A4; margin: 15mm 14mm 15mm 14mm; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; color: #1f2937; background: #fff;
+    font-family: "Segoe UI", Arial, sans-serif; font-size: 10pt; line-height: 1.5;
+  }
+  h1 { font-size: 23pt; line-height: 1.15; margin: 0 0 6px; color: #0b3f6f; letter-spacing: -.2px; }
+  h2 {
+    font-size: 13.5pt; margin: 22px 0 8px; padding-bottom: 4px; color: #0b3f6f;
+    border-bottom: 1.5px solid #cbd8e6; page-break-after: avoid;
+  }
+  h3 { font-size: 11pt; margin: 14px 0 5px; color: #14496f; page-break-after: avoid; }
+  p { margin: 0 0 7px; }
+  ul, ol { margin: 0 0 8px; padding-left: 20px; }
+  li { margin-bottom: 3px; }
+  code {
+    font-family: "Cascadia Mono", Consolas, monospace; font-size: 8.9pt;
+    background: #f1f5fa; color: #0b5aa5; padding: 0 3px; border-radius: 3px;
+  }
+  pre {
+    margin: 6px 0 10px; padding: 9px 11px; background: #f6f9fc;
+    border: 1px solid #dbe4ef; border-left: 3px solid #0b5aa5; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, monospace; font-size: 8.4pt; line-height: 1.45;
+    white-space: pre-wrap; page-break-inside: avoid;
+  }
+  pre code { background: none; padding: 0; color: #1f2937; font-size: inherit; }
+  table { width: 100%; border-collapse: collapse; margin: 6px 0 10px; font-size: 8.9pt; page-break-inside: auto; }
+  thead { display: table-header-group; }
+  tr { page-break-inside: avoid; }
+  th, td { border: 1px solid #dbe4ef; padding: 4px 7px; text-align: left; vertical-align: top; }
+  th { background: #eaf1f8; color: #0b3f6f; font-weight: 600; }
+  td.c { text-align: center; white-space: nowrap; }
+  td.path, .mono { font-family: "Cascadia Mono", Consolas, monospace; color: #0b5aa5; white-space: nowrap; }
+  .tag-ok { color: #1b7f3d; font-weight: 700; }
+  .tag-no { color: #b3261e; font-weight: 700; }
+  .muted { color: #62708a; }
+  .small { font-size: 8.6pt; }
+  .callout {
+    margin: 8px 0 12px; padding: 9px 12px; background: #eef6ff;
+    border-left: 4px solid #0b5aa5; border-radius: 3px; page-break-inside: avoid;
+  }
+  .callout.warn { background: #fff8e8; border-left-color: #c47f00; }
+  .callout.danger { background: #fdeeee; border-left-color: #b3261e; }
+  .callout p:last-child { margin-bottom: 0; }
+  .cover { border-bottom: 3px solid #0b5aa5; padding-bottom: 12px; margin-bottom: 14px; }
+  .eyebrow { font-size: 8.6pt; letter-spacing: 1.4px; text-transform: uppercase; color: #0b5aa5; font-weight: 700; }
+  .lead { font-size: 10.5pt; color: #374151; margin-top: 8px; }
+  .meta { width: 100%; font-size: 8.8pt; margin-top: 10px; }
+  .meta th { width: 30mm; background: #f6f9fc; font-weight: 600; color: #374151; }
+  .steps { width: 100%; border-collapse: separate; border-spacing: 6px 0; margin: 8px 0 4px; }
+  .steps td { border: 1px solid #cbd8e6; background: #f8fbfe; padding: 8px 9px; vertical-align: top; font-size: 8.8pt; }
+  .steps b { color: #0b5aa5; font-size: 9pt; }
+  .nobreak { page-break-inside: avoid; }
+  .newpage { page-break-before: always; }
+  footer { margin-top: 18px; padding-top: 6px; border-top: 1px solid #dbe4ef; font-size: 8pt; color: #6b778c; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="eyebrow">Dokumen Integrasi · Internal</div>
+  <h1>API Key Bridge SIMRS ↔ Orthanc PACS</h1>
+  <p class="lead">
+    Panduan untuk tim SIMRS: cara memperoleh API key, cara mengirimkannya, endpoint mana yang
+    memerlukan key, contoh kode siap pakai (PHP / CodeIgniter / Python), serta penanganan error.
+  </p>
+  <table class="meta">
+    <tr><th>Versi dokumen</th><td>1.0 — 19 November 2026</td></tr>
+    <tr><th>Lingkup</th><td>Bridge API (<code>public/index.php</code>) — bukan REST Orthanc langsung</td></tr>
+    <tr><th>Base URL produksi</th><td class="mono">http://10.4.0.10/</td></tr>
+    <tr><th>Base URL dev lokal</th><td class="mono">http://127.0.0.1:8081/</td></tr>
+    <tr><th>Autentikasi program</th><td>Header <code>X-API-Key: &lt;key&gt;</code></td></tr>
+    <tr><th>Format respons</th><td>JSON (data) · biner <code>image/jpeg</code>, <code>image/png</code>, <code>application/zip</code>, <code>application/dicom</code></td></tr>
+    <tr><th>Rujukan teknis</th><td><code>API.md</code> (lengkap) dan <code>integrations/codeigniter/README.md</code></td></tr>
+  </table>
+</div>
+
+<div class="callout warn">
+  <p><b>Dokumen ini tidak memuat nilai API key.</b> Key bersifat rahasia (setara password — memberi akses
+  ke data pasien). Minta nilainya ke admin PACS lewat jalur aman, lalu simpan di environment /
+  secret manager SIMRS, <b>bukan</b> di source code.</p>
+</div>
+
+<h3>Ringkasan tiga langkah</h3>
+<table class="steps">
+  <tr>
+    <td><b>1. Dapatkan key</b><br>Admin PACS membuat key di dashboard → ⚙ Pengaturan → panel <i>API Bridge</i> → <b>Generate</b>, lalu menyerahkannya lewat kanal aman.</td>
+    <td><b>2. Simpan &amp; kirim</b><br>Simpan sebagai environment variable (mis. <code>PACS_BRIDGE_KEY</code>) dan kirim pada setiap request sebagai header <code>X-API-Key</code>.</td>
+    <td><b>3. Panggil endpoint data</b><br>Worklist, study, gambar, dan ZIP bisa diakses dengan key. Endpoint administratif (Pengaturan, user) tetap butuh sesi login manager.</td>
+  </tr>
+</table>
+
+<h2>1. Konsep: dua cara SIMRS terhubung</h2>
+
+<table>
+  <thead><tr><th style="width:26%">Cara</th><th>Alur</th><th style="width:24%">Autentikasi</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><b>A. Bridge SDK langsung ke Orthanc</b><br><span class="small muted">(library <code>Bridge</code>, <code>WorklistService</code>, <code>StudyService</code>)</span></td>
+      <td>SIMRS → DICOM/REST Orthanc <code>10.4.0.10</code></td>
+      <td>Tidak memakai API key; pengamanannya di level jaringan (LAN/VPN) karena REST Orthanc saat ini tanpa autentikasi.</td>
+    </tr>
+    <tr>
+      <td><b>B. Bridge API (HTTP)</b><br><span class="small muted">(<code>public/index.php</code>)</span></td>
+      <td>SIMRS → <code>http://10.4.0.10/</code> dengan header <code>X-API-Key</code> → Orthanc</td>
+      <td><b>API key</b>. Inilah yang dibahas di dokumen ini.</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><b>Kapan memilih cara B?</b> Bila SIMRS hanya membutuhkan order worklist, pencarian study, dan
+pengambilan gambar/ZIP — tanpa perlu menjadi SCU DICOM. Cara B memberi aturan terpusat: validasi,
+nama pasien tanpa koma, tanggal order, render JPG/PNG, watermark, dan filter tanggal.</p>
+
+<h3>1.1 Dari mana API key berasal</h3>
+<ol>
+  <li><b>Dashboard bridge</b> → login sebagai <b>manager</b> → ⚙ <b>Pengaturan</b> → panel <b>API Bridge</b> →
+      field <b>API Key</b> → tombol <b>Generate</b> (48 karakter heksadesimal) → <b>Simpan Pengaturan</b>.</li>
+  <li>Disimpan di server pada <code>data/settings.json</code> (tidak ikut paket deploy, tidak di-commit).</li>
+  <li>Alternatif: environment variable <code>PACS_BRIDGE_KEY</code> pada container — <b>prioritas tertinggi</b>, tidak menulis file.</li>
+</ol>
+
+<p>Nilai utuh key hanya bisa dibaca lewat sesi login manager: dashboard (tombol <b>Sembunyikan / Salin</b>)
+atau <code>GET /settings/api-key</code>. Endpoint ini <b>menolak</b> pemanggilan dengan API key (403) supaya
+key tidak bisa membocorkan dirinya sendiri.</p>
+
+<h2>2. Cara mengirim API key</h2>
+
+<p>Key dikirim <b>hanya lewat header HTTP</b> pada setiap request. Nama header tidak peka huruf
+(<code>x-api-key</code> boleh), tetapi <b>nilainya dibandingkan persis</b> — jangan menambah spasi,
+baris baru, atau tanda kutip.</p>
+
+<table>
+  <thead><tr><th style="width:34%">Cara</th><th>Contoh</th><th style="width:16%">Diterima?</th></tr></thead>
+  <tbody>
+    <tr><td>Header HTTP</td><td class="mono">X-API-Key: 9037c7e9…eb45</td><td class="c tag-ok">Ya</td></tr>
+    <tr><td>Query string</td><td class="mono">/health?api_key=9037c7e9…</td><td class="c tag-no">Tidak → 401</td></tr>
+    <tr><td>Body JSON</td><td class="mono">{"api_key": "9037c7e9…"}</td><td class="c tag-no">Tidak → 401</td></tr>
+    <tr><td>Cookie</td><td class="mono">api_key=…</td><td class="c tag-no">Tidak → 401</td></tr>
+    <tr><td>Basic/Bearer auth</td><td class="mono">Authorization: Bearer …</td><td class="c tag-no">Tidak → 401</td></tr>
+  </tbody>
+</table>
+
+<p class="small muted">Preflight CORS (<code>OPTIONS</code>) tidak memerlukan key dan selalu dijawab <code>204</code>,
+sehingga pemanggilan <code>fetch</code>/XHR dari browser tidak terblokir.</p>
+
+<h3>2.1 curl</h3>
+<pre><code>BASE="http://10.4.0.10"
+KEY="&lt;API_KEY&gt;"
+
+curl -H "X-API-Key: $KEY" "$BASE/health"
+curl -H "X-API-Key: $KEY" "$BASE/worklists"
+curl -H "X-API-Key: $KEY" "$BASE/studies/A261105038/jpg?quality=90" -o hasil.jpg</code></pre>
+
+<h3>2.2 PowerShell</h3>
+<pre><code>$base = 'http://10.4.0.10'
+$key  = $env:PACS_BRIDGE_KEY
+$h    = @{ 'X-API-Key' = $key }
+
+Invoke-RestMethod "$base/health" -Headers $h
+Invoke-WebRequest  "$base/studies/A261105038/jpg?watermark=1" -Headers $h -OutFile hasil.jpg</code></pre>
+
+<h3>2.3 PHP (cURL)</h3>
+<pre><code>&lt;?php
+$ch = curl_init('http://10.4.0.10/health');
+curl_setopt_array($ch, [
+    CURLOPT_RETURNTRANSFER =&gt; true,
+    CURLOPT_HTTPHEADER     =&gt; ['X-API-Key: ' . getenv('PACS_BRIDGE_KEY')],
+    CURLOPT_TIMEOUT        =&gt; 30,
+]);
+$json = json_decode((string) curl_exec($ch), true);
+$code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+curl_close($ch);</code></pre>
+
+<h2>3. Endpoint mana yang perlu <code>X-API-Key</code></h2>
+
+<h3>3.1 Publik — tanpa key dan tanpa sesi</h3>
+<table>
+  <thead><tr><th style="width:16%">Method</th><th style="width:30%">Path</th><th>Keterangan</th></tr></thead>
+  <tbody>
+    <tr><td>GET</td><td class="path">/</td><td>halaman dashboard (login lewat form)</td></tr>
+    <tr><td>GET</td><td class="path">/dashboard</td><td>sama dengan <code>/</code></td></tr>
+    <tr><td>POST</td><td class="path">/login</td><td>login dashboard → cookie sesi</td></tr>
+    <tr><td>POST</td><td class="path">/logout</td><td>keluar</td></tr>
+    <tr><td>GET</td><td class="path">/me</td><td>status kredensial; tanpa kredensial → <code>"authenticated": false</code>, dengan key → <code>"via": "api-key"</code></td></tr>
+    <tr><td>OPTIONS</td><td class="path">*</td><td>preflight CORS → <code>204</code></td></tr>
+  </tbody>
+</table>
+
+<h3>3.2 Boleh / wajib memakai key <span class="tag-ok">✔</span></h3>
+<p class="small muted">Semua endpoint data. Tanpa key (dan tanpa sesi) → <code>401</code>.</p>
+<table>
+  <thead><tr><th style="width:16%">Method</th><th style="width:38%">Path</th><th>Fungsi</th></tr></thead>
+  <tbody>
+    <tr><td>GET</td><td class="path">/health</td><td>status Orthanc + worklist + jumlah study</td></tr>
+    <tr><td>GET</td><td class="path">/accession</td><td>nomor AccessionNumber baru (format alat Orthanc)</td></tr>
+    <tr><td>GET</td><td class="path">/worklists</td><td>daftar order</td></tr>
+    <tr><td>POST</td><td class="path">/worklists</td><td>buat order (kirim ke worklist modalitas)</td></tr>
+    <tr><td>GET</td><td class="path">/worklists/{id}</td><td>detail order</td></tr>
+    <tr><td>PUT</td><td class="path">/worklists/{id}</td><td>ubah order</td></tr>
+    <tr><td>DELETE</td><td class="path">/worklists/{id}</td><td>hapus order</td></tr>
+    <tr><td>GET</td><td class="path">/studies?accession=…</td><td>cari study by AccessionNumber</td></tr>
+    <tr><td>GET</td><td class="path">/studies?patient_id=…</td><td>riwayat study by No. RM</td></tr>
+    <tr><td>GET</td><td class="path">/studies?name=…</td><td>cari study by nama pasien (parsial)</td></tr>
+    <tr><td>GET</td><td class="path">/studies/recent?date=&amp;limit=&amp;modality=</td><td>study terbaru (hari ini / semua / per modalitas)</td></tr>
+    <tr><td>GET</td><td class="path">/studies/{acc}/jpg?quality=&amp;watermark=1</td><td>gambar JPEG (watermark otomatis dilewati untuk US &amp; ECG)</td></tr>
+    <tr><td>GET</td><td class="path">/studies/{acc}/png?width=</td><td>gambar PNG, bisa di-resize</td></tr>
+    <tr><td>GET</td><td class="path">/studies/{acc}/images</td><td>daftar instance/gambar study</td></tr>
+    <tr><td>GET</td><td class="path">/studies/{acc}/zip</td><td>ZIP seluruh DICOM study</td></tr>
+    <tr><td>GET</td><td class="path">/studies/{acc}/zip-jpg?quality=</td><td>ZIP berisi JPG ber-watermark (folder = No. RM)</td></tr>
+    <tr><td>GET</td><td class="path">/instances/{id}/jpg?quality=</td><td>render 1 instance sebagai JPEG</td></tr>
+    <tr><td>GET</td><td class="path">/instances/{id}/file</td><td>unduh 1 file DICOM</td></tr>
+    <tr><td>GET</td><td class="path">/settings</td><td>baca konfigurasi aktif — <b>tanpa</b> field <code>api_key</code> / <code>has_api_key</code></td></tr>
+  </tbody>
+</table>
+
+<h3>3.3 Menolak key → <code>403</code> <span class="tag-no">✘</span></h3>
+<p class="small muted">Endpoint administratif hanya bisa dipanggil dengan sesi login dashboard (manager;
+kecuali ganti password sendiri).</p>
+<table>
+  <thead><tr><th style="width:16%">Method</th><th style="width:30%">Path</th><th>Pesan error (JSON <code>error</code>)</th></tr></thead>
+  <tbody>
+    <tr><td>GET</td><td class="path">/settings/api-key</td><td><code>API key hanya bisa dilihat lewat sesi login</code></td></tr>
+    <tr><td>PUT</td><td class="path">/settings</td><td><code>Perubahan pengaturan harus melalui sesi login</code></td></tr>
+    <tr><td>POST</td><td class="path">/settings/password</td><td><code>Harus login</code></td></tr>
+    <tr><td>GET / POST</td><td class="path">/users</td><td><code>Hanya akun manager yang boleh mengelola user</code></td></tr>
+    <tr><td>PUT / DELETE</td><td class="path">/users/{username}</td><td><code>Hanya akun manager yang boleh mengelola user</code></td></tr>
+  </tbody>
+</table>
+
+<div class="callout">
+  <p><b>Ringkas:</b> semua endpoint <b>data</b> menerima API key. Hanya 4 kelompok <b>administratif</b> yang
+  menolaknya: <code>GET /settings/api-key</code>, <code>PUT /settings</code>,
+  <code>POST /settings/password</code>, dan <code>/users*</code>.</p>
+</div>
+
+<h2>4. Hak akses per peran</h2>
+
+<table>
+  <thead><tr><th style="width:40%">Aksi</th><th class="c">API key</th><th class="c">Sesi manager</th><th class="c">Sesi operator</th></tr></thead>
+  <tbody>
+    <tr><td><code>/health</code>, <code>/accession</code>, <code>/worklists*</code></td><td class="c tag-ok">✔</td><td class="c">✔</td><td class="c">✔</td></tr>
+    <tr><td><code>/studies*</code>, gambar, ZIP, DICOM, <code>/instances*</code></td><td class="c tag-ok">✔</td><td class="c">✔</td><td class="c">✔</td></tr>
+    <tr><td><code>GET /settings</code></td><td class="c tag-ok">✔</td><td class="c">✔</td><td class="c">✔ (tanpa info key)</td></tr>
+    <tr><td><code>GET /settings/api-key</code> (key utuh)</td><td class="c tag-no">✘ 403</td><td class="c">✔</td><td class="c tag-no">✘ 403</td></tr>
+    <tr><td><code>PUT /settings</code> (ubah IP/port/AET)</td><td class="c tag-no">✘ 403</td><td class="c">✔</td><td class="c tag-no">✘ 403</td></tr>
+    <tr><td><code>POST /settings/password</code> (akun sendiri)</td><td class="c tag-no">✘ 403</td><td class="c">✔</td><td class="c">✔</td></tr>
+    <tr><td><code>/users*</code> (kelola user dashboard)</td><td class="c tag-no">✘ 403</td><td class="c">✔</td><td class="c tag-no">✘ 403</td></tr>
+    <tr><td><code>POST /login</code>, <code>POST /logout</code>, <code>GET /me</code></td><td class="c">publik</td><td class="c">publik</td><td class="c">publik</td></tr>
+  </tbody>
+</table>
+
+<h2>5. Contoh integrasi SIMRS</h2>
+
+<h3>5.1 Pakai <code>BridgeApiClient</code> (disarankan, tanpa dependency)</h3>
+<pre><code>&lt;?php
+require_once '/path/ke/PACSPROJEC/src/autoload.php';
+
+use Simrs\Pacs\BridgeApiClient;
+
+$api = new BridgeApiClient('http://10.4.0.10', getenv('PACS_BRIDGE_KEY'));
+
+$api-&gt;health();                                        // status Orthanc &amp; worklist
+
+$api-&gt;createWorklist([
+    'patient_name'     =&gt; 'TARYA BIN WARDI',
+    'title'            =&gt; 'Tn.',
+    'patient_id'       =&gt; 'A048919',
+    'accession_number' =&gt; 'A261105038',
+    'procedure'        =&gt; 'THORAX PA',
+    'modality'         =&gt; 'DX',
+    'station_aet'      =&gt; 'LEAD_CLIENT',
+]);
+
+$studies = $api-&gt;findStudiesByAccession('A261105038');
+$jpg     = $api-&gt;jpegByAccession('A261105038', 90);    // ['content','mime','filename'] | null
+$zip     = $api-&gt;zipByAccession('A261105038');         // string biner ZIP | null</code></pre>
+<p class="small">Error dilempar sebagai <code>Simrs\Pacs\BridgeApiException</code> (berisi <code>statusCode</code>).</p>
+
+<h3>5.2 CodeIgniter 4</h3>
+<pre><code>// .env:  PACS_BRIDGE_KEY = &lt;API_KEY&gt;
+
+$api = new \Simrs\Pacs\BridgeApiClient('http://10.4.0.10', env('PACS_BRIDGE_KEY'));
+
+$rows = $api-&gt;recentStudies('today', 12);
+return $this-&gt;response
+    -&gt;setHeader('Content-Type', 'image/jpeg')
+    -&gt;setBody($api-&gt;jpegByAccession($order['accession'], 90)['content']);</code></pre>
+
+<h3>5.3 CodeIgniter 3</h3>
+<pre><code>// .env / application/config/pacs.php
+$api = new \Simrs\Pacs\BridgeApiClient($this-&gt;config-&gt;item('bridge_url'),
+                                       getenv('PACS_BRIDGE_KEY'));
+$img = $api-&gt;jpegByAccession($accession, 90);
+
+$this-&gt;output
+    -&gt;set_header('Content-Type: image/jpeg')
+    -&gt;set_output($img === null ? '' : $img['content']);</code></pre>
+
+<p class="small muted">Catatan: library <code>App\Libraries\Pacs</code> (CI4) dan <code>Pacs_bridge</code> (CI3)
+adalah SDK yang memanggil <b>Orthanc langsung</b> — keduanya <b>tidak</b> memakai API key. Gunakan
+<code>BridgeApiClient</code> bila integrasi lewat Bridge API (cara B).</p>
+
+<h3>5.4 Python / service lain</h3>
+<pre><code>import os, requests
+
+BASE = "http://10.4.0.10"
+H = {"X-API-Key": os.environ["PACS_BRIDGE_KEY"]}
+
+print(requests.get(f"{BASE}/health", headers=H, timeout=30).json())
+
+img = requests.get(f"{BASE}/studies/A261105038/jpg?quality=90", headers=H, timeout=60)
+open("hasil.jpg", "wb").write(img.content)</code></pre>
+
+<h3>5.5 Menyimpan key di SIMRS</h3>
+<ul>
+  <li>Simpan sebagai <b>environment variable</b> (<code>PACS_BRIDGE_KEY</code>) atau secret manager <code>.env</code> CI — jangan di <code>application/config/*.php</code> yang ikut versioning.</li>
+  <li>Satu key untuk satu instalasi SIMRS; jangan dibagikan ke aplikasi lain bila tidak perlu.</li>
+  <li>Jangan menulis key ke log, pesan error, atau tampilan halaman.</li>
+</ul>
+
+<h2>6. Alur integrasi yang disarankan</h2>
+<ol>
+  <li><b>Health check</b> saat SIMRS start / berkala: <code>GET /health</code> dengan key.
+      Periksa <code>worklist.reachable</code> — Orthanc bisa hidup sementara service MWL mati.</li>
+  <li><b>Nomor accession</b>: <code>GET /accession</code> (format alat Orthanc), atau kirim accession milik SIMRS.</li>
+  <li><b>Kirim order</b>: <code>POST /worklists</code> saat pasien didaftarkan. <code>accession_number</code> yang
+      dikembalikan adalah kunci untuk mencari hasil.</li>
+  <li><b>Ambil hasil</b>: <code>GET /studies?accession=…</code> secara berkala (polling) hingga study muncul,
+      lalu <code>GET /studies/{acc}/jpg?watermark=1</code> atau <code>/zip-jpg</code>.</li>
+  <li><b>Simpan gambar di SIMRS</b> seperlunya (bridge bersifat stateless — tidak menyimpan gambar).</li>
+</ol>
+
+<div class="callout warn">
+  <p><b>Catatan operasional penting</b></p>
+  <ul class="small">
+    <li><code>ScheduledProcedureStepStartDate</code> harus <b>hari ini</b> (<code>Ymd</code>), kalau tidak order tidak terlihat alat.</li>
+    <li>AE Title alat <b>case-sensitive</b>; kirim huruf asli (<code>VersanaB-000000</code>, bukan <code>VERSANAB-000000</code>).</li>
+    <li>PatientName diformat tanpa koma; gunakan helper/<code>PatientName::safe()</code> bila mengirim lewat SDK.</li>
+    <li>Sebagian alat (mis. USG) mengirim study <b>tanpa AccessionNumber</b>. Untuk study seperti itu, pakai
+        <b>ID Orthanc</b> dari respons <code>/studies/recent</code> sebagai kunci gambar/ZIP.</li>
+    <li>JPG/PNG hasil render <b>bukan</b> citra diagnostik (lossy, 8-bit).</li>
+    <li>Timeout ZIP ≥ 60 detik; batasi unduhan paralel 3–4 gambar agar Orthanc tidak timeout.</li>
+  </ul>
+</div>
+
+<h2>7. Penanganan error</h2>
+
+<table>
+  <thead><tr><th style="width:12%">HTTP</th><th style="width:26%">Arti</th><th>Contoh penyebab / tindakan</th></tr></thead>
+  <tbody>
+    <tr><td class="c">200</td><td>OK</td><td>request berhasil</td></tr>
+    <tr><td class="c">201</td><td>Created</td><td><code>POST /worklists</code> berhasil</td></tr>
+    <tr><td class="c">204</td><td>No Content</td><td>preflight <code>OPTIONS</code></td></tr>
+    <tr><td class="c">400</td><td>Validasi gagal</td><td>field wajib kosong / parameter salah — perbaiki body</td></tr>
+    <tr><td class="c">401</td><td>Unauthorized</td><td>key tidak dikirim, salah, atau ditaruh di query/body — kirim ulang di header</td></tr>
+    <tr><td class="c">403</td><td>Forbidden</td><td>endpoint administratif dipanggil dengan key — gunakan sesi manager</td></tr>
+    <tr><td class="c">404</td><td>Tidak ditemukan</td><td>worklist/study belum ada — ulangi polling beberapa saat lagi</td></tr>
+    <tr><td class="c">405</td><td>Method tidak didukung</td><td>mis. <code>PATCH /worklists</code> — pakai GET/POST/PUT/DELETE</td></tr>
+    <tr><td class="c">500</td><td>Internal error</td><td>masalah server (mis. folder <code>data/</code> tidak writable) — laporkan ke admin PACS</td></tr>
+    <tr><td class="c">502</td><td>Orthanc error</td><td>Orthanc mati/timeout; lihat <code>orthanc_status</code> &amp; <code>orthanc_body</code>, ulangi dengan backoff</td></tr>
+    <tr><td class="c">503</td><td>Fitur tidak tersedia</td><td>watermark diminta tetapi GD/FreeType tidak aktif di server</td></tr>
+  </tbody>
+</table>
+
+<h3>7.1 Bentuk respons error</h3>
+<pre><code>// 401
+{"error": "Unauthorized", "message": "Silakan login di dashboard"}
+
+// 403 (contoh)
+{"error": "API key hanya bisa dilihat lewat sesi login"}
+
+// 502
+{"error": "Orthanc error", "message": "…", "orthanc_status": 0, "orthanc_body": ""}</code></pre>
+
+<p class="small">Saran: bedakan penanganan <b>4xx</b> (jangan retry kecuali 401 setelah memperbaiki key) dan
+<b>5xx/502</b> (retry dengan backoff 2–5 detik, maksimum 3 kali).</p>
+
+<h2>8. Keamanan &amp; rotasi key</h2>
+<ul>
+  <li><b>Perlakukan seperti password.</b> Key memberi akses penuh data pasien (nama, No. RM, gambar).</li>
+  <li><b>Wajib HTTPS</b> bila melewati jaringan non-LAN (mis. lewat internet/VPN publik).</li>
+  <li><b>Jangan commit</b> key ke repo; jangan tampilkan di UI SIMRS atau log.</li>
+  <li><b>Rotasi</b>: manager membuat key baru di dashboard → perbarui environment SIMRS → restart service pemanggil.
+      Key lama otomatis tidak berlaku karena hanya satu key aktif.</li>
+  <li><b>Cabut akses program</b>: kosongkan field API Key lalu simpan — mode kembali ke <b>sesi login saja</b>.</li>
+  <li><b>Batasi jaringan</b>: API sebaiknya hanya dapat dijangkau dari LAN RS / VPN.</li>
+  <li>Nilai key di <code>GET /settings</code> selalu <b>ter-mask</b> (8 karakter awal … 4 karakter akhir).</li>
+</ul>
+
+<h2>9. Uji cepat sebelum go-live</h2>
+<table>
+  <thead><tr><th style="width:34%">Uji</th><th>Perintah / cara</th><th style="width:20%">Hasil yang diharapkan</th></tr></thead>
+  <tbody>
+    <tr><td>Auth API key</td><td class="mono small">php tools/test-api-key.php http://127.0.0.1:8081 &lt;API_KEY&gt;</td><td class="c">8 pass, 0 fail</td></tr>
+    <tr><td>Key valid</td><td class="mono small">curl -H "X-API-Key: &lt;key&gt;" http://10.4.0.10/health</td><td class="c">200 + JSON status</td></tr>
+    <tr><td>Key tidak dikirim</td><td class="mono small">curl http://10.4.0.10/health</td><td class="c">401</td></tr>
+    <tr><td>Endpoint admin</td><td class="mono small">curl -H "X-API-Key: &lt;key&gt;" http://10.4.0.10/users</td><td class="c">403</td></tr>
+    <tr><td>Mode kredensial</td><td class="mono small">curl -H "X-API-Key: &lt;key&gt;" http://10.4.0.10/me</td><td class="c"><code>"via": "api-key"</code></td></tr>
+    <tr><td>Postman</td><td class="small">Import <code>postman/</code>, pilih environment <i>Live</i>, isi variabel <code>apiKey</code></td><td class="c">19 request OK</td></tr>
+  </tbody>
+</table>
+
+<h2 class="newpage">Lampiran A. Daftar endpoint &amp; parameter</h2>
+
+<table>
+  <thead><tr><th style="width:31%">Endpoint</th><th>Parameter / body penting</th><th style="width:26%">Respons</th></tr></thead>
+  <tbody>
+    <tr><td class="path">GET /health</td><td>—</td><td>JSON: status Orthanc, study/pasien, worklist</td></tr>
+    <tr><td class="path">GET /accession</td><td>—</td><td><code>{"accession_number": "..."}</code></td></tr>
+    <tr><td class="path">GET /worklists</td><td>—</td><td>array entry worklist</td></tr>
+    <tr><td class="path">POST /worklists</td><td><code>patient_name</code>, <code>title</code>, <code>patient_id</code>, <code>accession_number</code>, <code>procedure</code>, <code>modality</code>, <code>station_aet</code></td><td>201 + <code>{id, patient_name, accession_number}</code></td></tr>
+    <tr><td class="path">GET /worklists/{id}</td><td>—</td><td>detail entry</td></tr>
+    <tr><td class="path">PUT /worklists/{id}</td><td>body sama seperti POST</td><td>entry terbaru</td></tr>
+    <tr><td class="path">DELETE /worklists/{id}</td><td>—</td><td><code>{"deleted": id}</code></td></tr>
+    <tr><td class="path">GET /studies</td><td><code>accession</code> | <code>patient_id</code> | <code>name</code> (wajib salah satu)</td><td>array study + <code>MainDicomTags.Modality</code></td></tr>
+    <tr><td class="path">GET /studies/recent</td><td><code>date=today|all|YYYYMMDD</code>, <code>limit</code> (1–300), <code>modality=DX|US|CT|ECG|PX</code></td><td><code>{date, limit, modality, count, studies[]}</code></td></tr>
+    <tr><td class="path">GET /studies/{acc}/jpg</td><td><code>quality</code> (1–100), <code>watermark=1</code></td><td>biner <code>image/jpeg</code></td></tr>
+    <tr><td class="path">GET /studies/{acc}/png</td><td><code>width</code> (min 64)</td><td>biner <code>image/png</code></td></tr>
+    <tr><td class="path">GET /studies/{acc}/images</td><td>—</td><td>array instance/gambar</td></tr>
+    <tr><td class="path">GET /studies/{acc}/zip</td><td>—</td><td><code>application/zip</code> (DICOM)</td></tr>
+    <tr><td class="path">GET /studies/{acc}/zip-jpg</td><td><code>quality</code>, <code>watermark=0</code> untuk mematikan</td><td><code>application/zip</code> (JPG)</td></tr>
+    <tr><td class="path">GET /instances/{id}/jpg</td><td><code>quality</code></td><td>biner <code>image/jpeg</code></td></tr>
+    <tr><td class="path">GET /instances/{id}/file</td><td>—</td><td><code>application/dicom</code></td></tr>
+    <tr><td class="path">GET /settings</td><td>—</td><td>JSON <code>{settings, effective}</code></td></tr>
+    <tr><td class="path">GET /settings/api-key</td><td>— (sesi manager)</td><td><code>{has_api_key, api_key}</code></td></tr>
+    <tr><td class="path">PUT /settings</td><td>body konfigurasi (sesi manager)</td><td><code>{"saved": true}</code></td></tr>
+    <tr><td class="path">POST /settings/password</td><td><code>current_password</code>, <code>new_password</code> (sesi)</td><td><code>{"saved": true}</code></td></tr>
+    <tr><td class="path">GET|POST /users</td><td><code>username</code>, <code>password</code>, <code>role</code> (sesi manager)</td><td>daftar / <code>{"created": true}</code></td></tr>
+    <tr><td class="path">PUT|DELETE /users/{username}</td><td><code>role?</code>, <code>password?</code> (sesi manager)</td><td><code>{"saved": true}</code> / <code>{"deleted": ...}</code></td></tr>
+  </tbody>
+</table>
+
+<p class="small muted">Kunci study <code>{acc}</code> boleh berupa <b>AccessionNumber</b>, <b>ID Orthanc</b>
+(<code>142ca2db-e3ae40d0-…</code>), atau <b>StudyInstanceUID</b>.</p>
+
+<h2>Lampiran B. Checklist go-live untuk SIMRS</h2>
+<table>
+  <thead><tr><th style="width:6%" class="c">#</th><th>Item</th><th style="width:16%" class="c">Status</th></tr></thead>
+  <tbody>
+    <tr><td class="c">1</td><td>API key diterima lewat kanal aman dan disimpan di environment/secret manager</td><td class="c">☐</td></tr>
+    <tr><td class="c">2</td><td>Key <b>tidak</b> ada di repository, log, atau tampilan aplikasi</td><td class="c">☐</td></tr>
+    <tr><td class="c">3</td><td>Seluruh request mengirim header <code>X-API-Key</code> (bukan query/body)</td><td class="c">☐</td></tr>
+    <tr><td class="c">4</td><td><code>GET /health</code> 200 dan <code>worklist.reachable = true</code></td><td class="c">☐</td></tr>
+    <tr><td class="c">5</td><td>Kirim order uji → muncul di daftar worklist → <b>dihapus</b> setelah uji</td><td class="c">☐</td></tr>
+    <tr><td class="c">6</td><td>Ambil JPG &amp; ZIP (JPG) satu study nyata berhasil, watermark sesuai (US/ECG tanpa watermark)</td><td class="c">☐</td></tr>
+    <tr><td class="c">7</td><td>Timeout HTTP ≥ 30 s (ZIP ≥ 60 s), retry + backoff untuk 502</td><td class="c">☐</td></tr>
+    <tr><td class="c">8</td><td><code>php tools/test-api-key.php &lt;base&gt; &lt;key&gt;</code> → 8 pass, 0 fail</td><td class="c">☐</td></tr>
+    <tr><td class="c">9</td><td>Akses API dibatasi LAN/VPN (atau HTTPS bila lintas jaringan)</td><td class="c">☐</td></tr>
+    <tr><td class="c">10</td><td>Prosedur rotasi key disepakati (siapa membuat, kapan, cara memperbarui env)</td><td class="c">☐</td></tr>
+  </tbody>
+</table>
+
+<footer>
+  Bridge SIMRS ↔ Orthanc PACS · API Key (dokumen integrasi v1.0) · 19 November 2026 · Internal —
+  nilai API key tidak pernah ditulis di dokumen ini.
+</footer>
+
+</body>
+</html>

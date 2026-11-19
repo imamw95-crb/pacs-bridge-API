@@ -1,0 +1,1869 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RIS-HLS PATROL — PACS Bridge API Worklist DICOM</title>
+<link rel="icon" type="image/png" href="assets/favicon.png">
+<style>
+  :root {
+    --bg: #f4f6f9;
+    --bg-soft: #ffffff;
+    --panel: #ffffff;
+    --panel-2: #f7f9fc;
+    --line: #e3e8ef;
+    --line-strong: #cdd6e1;
+    --text: #1c2531;
+    --muted: #67758a;
+    --accent: #1565c0;
+    --accent-dark: #104e96;
+    --accent-2: #1565c0;
+    --ok: #15803d;
+    --danger: #b42318;
+    --warn: #7a5600;
+    --warn-bg: #fff8e6;
+    --warn-line: #f0c36d;
+    --radius: 10px;
+    --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 1px 3px rgba(16, 24, 40, .04);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  input, select {
+    font: inherit; color: var(--text); background: #fff; border: 1px solid var(--line-strong);
+    border-radius: 8px; padding: 8px 10px; width: 100%; transition: border-color .15s, box-shadow .15s;
+  }
+  input:focus, select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(21, 101, 192, .12); }
+  input[readonly] { background: var(--panel-2); }
+  label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 5px; font-weight: 500; }
+  button {
+    font: inherit; cursor: pointer; border-radius: 8px; border: 1px solid var(--line-strong);
+    background: #fff; color: var(--text); padding: 8px 14px; transition: background .15s, border-color .15s;
+  }
+  button:hover { background: var(--panel-2); border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  button.primary:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
+  button.ghost { background: #fff; }
+  button.danger { color: var(--danger); border-color: #f2c6c2; }
+  button.danger:hover { background: #fdf3f2; border-color: var(--danger); }
+  button:disabled { opacity: .55; cursor: not-allowed; }
+  .hidden { display: none !important; }
+  .muted { color: var(--muted); font-size: 12.5px; }
+  .mono { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 12px; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .spacer { flex: 1; }
+
+  /* ---------- login ---------- */
+  #login { position: fixed; inset: 0; display: grid; place-items: center; z-index: 100; padding: 24px; background: #eef2f7; }
+  #login .card {
+    width: 100%; max-width: 380px; background: #fff; border: 1px solid var(--line);
+    border-radius: 12px; padding: 28px 26px; box-shadow: 0 12px 32px rgba(16, 24, 40, .10);
+  }
+  #login .login-logo {
+    display: block; width: 168px; height: auto; margin: 0 0 18px; border-radius: 8px;
+  }
+  #login h1 { font-size: 17px; margin: 0 0 6px; font-weight: 650; }
+  #login p.sub { margin: 0 0 20px; color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+  #login .field { margin-bottom: 14px; }
+  #login .err { color: var(--danger); font-size: 12.5px; min-height: 18px; margin-top: 10px; }
+
+  /* ---------- shell ---------- */
+  header.top {
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding: 14px 26px;
+    border-bottom: 1px solid var(--line); background: #fff;
+    position: sticky; top: 0; z-index: 20; box-shadow: 0 1px 2px rgba(16, 24, 40, .04);
+  }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand .brand-logo {
+    height: 40px; width: auto; display: block; border-radius: 6px;
+  }
+  .brand h1 { font-size: 15px; margin: 0; font-weight: 650; }
+  .brand p { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
+  .brand p.brand-sub { margin: 1px 0 0; font-size: 11.5px; font-weight: 600; color: var(--accent); letter-spacing: .2px; }
+  .status {
+    display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 6px 12px;
+    border-radius: 999px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text);
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .dot.ok { background: #16a34a; }
+  .dot.bad { background: var(--danger); }
+  .user {
+    display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 5px 12px;
+    border-radius: 999px; border: 1px solid var(--line); background: #fff;
+  }
+  header.top button { padding: 7px 12px; font-size: 13px; }
+  @media (max-width: 1000px) { header.top .lbl { display: none; } }
+
+  main { padding: 20px 26px 60px; max-width: 1680px; margin: 0 auto; }
+  .stats { display: grid; gap: 12px; grid-template-columns: repeat(4, 1fr); margin-bottom: 16px; }
+  @media (max-width: 900px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 520px) { .stats { grid-template-columns: 1fr; } }
+  .stat { background: #fff; border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 16px; box-shadow: var(--shadow); }
+  .stat .label { font-size: 11px; text-transform: uppercase; letter-spacing: .7px; color: var(--muted); font-weight: 600; }
+  .stat .value { font-size: 23px; font-weight: 650; margin-top: 5px; letter-spacing: -.3px; }
+  .stat .sub { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+
+  .grid { display: grid; gap: 16px; grid-template-columns: 360px minmax(0, 1fr); align-items: start; }
+  @media (max-width: 1180px) { .grid { grid-template-columns: 1fr; } }
+  .grid > .panel.worklist { position: sticky; top: calc(var(--header-h, 64px) + 12px); }
+  @media (max-width: 1180px) { .grid > .panel.worklist { position: static; } }
+  .panel { background: #fff; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; overflow: clip; box-shadow: var(--shadow); }
+  .panel > header { padding: 14px 18px; border-bottom: 1px solid var(--line); background: var(--panel-2); }
+  .panel h2 { margin: 0; font-size: 14px; font-weight: 650; }
+  .panel .hint { font-size: 12px; color: var(--muted); margin-top: 3px; }
+  .panel .body { padding: 16px 18px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); font-weight: 600; background: var(--panel-2); }
+  tbody tr:hover { background: #f9fbfd; }
+  .tag {
+    display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 6px;
+    border: 1px solid #cfe0f5; color: #1565c0; background: #eef4fb; font-weight: 600;
+  }
+  .tag.warn { border-color: #f0d090; color: #8a5a00; background: #fff7e6; }
+  .tag[hidden] { display: none; }
+  @media (max-width: 1599px) { .user .tag.warn .lbl { display: none; } }
+
+  form.order { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; }
+  form.order .full { grid-column: 1 / -1; }
+
+  .studies-tools {
+    position: sticky; top: var(--header-h, 64px); z-index: 6; background: #fff;
+    margin: -16px -18px 14px; padding: 14px 18px 10px; border-bottom: 1px solid var(--line);
+  }
+  .studies-tools .row + .row { margin-top: 8px; }
+  .mod-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  .mod-tabs button {
+    padding: 7px 14px; font-size: 12.5px; font-weight: 600; color: var(--muted);
+    background: #fff; border: 1px solid var(--line-strong); border-radius: 999px;
+  }
+  .mod-tabs button:hover { border-color: var(--accent); color: var(--accent); }
+  .mod-tabs button.active {
+    background: var(--accent); border-color: var(--accent); color: #fff;
+  }
+  .mod-tabs button.active:hover { color: #fff; }
+  .studies { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+  .outside-note {
+    grid-column: 1 / -1; border: 1px solid var(--warn-line); background: var(--warn-bg); color: var(--warn);
+    border-radius: var(--radius); padding: 10px 12px; font-size: 12.5px; line-height: 1.5;
+  }
+  .outside-grid { grid-column: 1 / -1; }
+  .study {
+    border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: #fff;
+    display: flex; flex-direction: column; transition: border-color .15s, box-shadow .15s;
+  }
+  .study:hover { border-color: var(--line-strong); box-shadow: 0 4px 14px rgba(16, 24, 40, .08); }
+  .study .thumb { height: 178px; background: #f1f4f8; display: grid; place-items: center; overflow: hidden; cursor: zoom-in; border-bottom: 1px solid var(--line); }
+  .study .thumb img { width: 100%; height: 100%; object-fit: contain; transition: transform .18s; }
+  .study .thumb.noimg::after { content: 'gambar belum tersedia'; color: var(--muted); font-size: 11.5px; }
+  .study .thumb:hover img { transform: scale(1.03); }
+  .study .meta { padding: 10px 12px 8px; display: grid; gap: 3px; flex: 1; }
+  .study .name { font-size: 13px; font-weight: 600; line-height: 1.35; }
+  .study .sub { font-size: 11.5px; color: var(--muted); }
+  .study .actions { padding: 0 12px 12px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .study .actions > * {
+    flex: 0 1 auto; min-width: 0; text-align: center; font-size: 11px; padding: 5px 7px; border-radius: 6px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .study .actions .view-btn { flex: 1 1 100%; font-size: 12px; font-weight: 600; padding: 7px 10px; }
+  .empty { color: var(--muted); font-size: 13px; padding: 22px 4px; text-align: center; }
+
+  .toast { position: fixed; right: 20px; bottom: 20px; display: grid; gap: 8px; z-index: 120; }
+  .toast div {
+    padding: 11px 16px; border-radius: 8px; font-size: 13px; background: #fff;
+    border: 1px solid var(--line); border-left: 3px solid var(--accent);
+    box-shadow: 0 8px 24px rgba(16, 24, 40, .12);
+  }
+  .toast div.ok { border-left-color: #16a34a; }
+  .toast div.err { border-left-color: var(--danger); color: var(--danger); }
+
+  #modal, #settings, #account { position: fixed; inset: 0; display: none; place-items: center; background: rgba(15, 23, 42, .45); z-index: 90; padding: 16px; }
+  #modal.open, #settings.open, #account.open { display: grid; }
+  #modal .viewer {
+    width: min(1680px, 98vw); height: min(94vh, 1080px); display: flex; flex-direction: column;
+    background: #fff; border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
+    box-shadow: 0 18px 40px rgba(16, 24, 40, .25);
+  }
+  #modal .viewer:fullscreen { width: 100vw; height: 100vh; max-height: none; border-radius: 0; border: 0; }
+  #modal .vh { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--panel-2); }
+  #modal .vh .vt { flex: 1; min-width: 0; font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #modal .vh .vr { display: flex; gap: 6px; }
+  #modal .vh button, #modal .vh a {
+    font-size: 12px; padding: 6px 10px; border-radius: 7px; border: 1px solid var(--line-strong);
+    background: #fff; color: var(--text); white-space: nowrap;
+  }
+  #modal .vh a:hover { text-decoration: none; background: #fff; border-color: var(--accent); color: var(--accent); }
+  #modal .vb {
+    position: relative; flex: 1 1 auto; min-height: 240px; background: #0f172a;
+    overflow: hidden; touch-action: none;
+  }
+  #modal .vb.zoomed { cursor: grab; }
+  #modal .vb.panning { cursor: grabbing; }
+  #modal img { position: absolute; left: 0; top: 0; transform-origin: 0 0; display: block; user-select: none; -webkit-user-drag: none; }
+  #modal .vload { position: absolute; inset: 0; display: grid; place-items: center; gap: 8px; color: #e2e8f0; font-size: 12.5px; background: rgba(15, 23, 42, .55); }
+  #modal .vzoom {
+    position: absolute; left: 12px; bottom: 12px; display: none; align-items: center; gap: 6px;
+    padding: 5px 7px; border-radius: 8px; background: rgba(15, 23, 42, .74);
+    border: 1px solid rgba(226, 232, 240, .22); color: #e2e8f0; font-size: 12px; z-index: 3;
+  }
+  #modal .vb.ready .vzoom { display: flex; }
+  #modal .vzoom button {
+    height: 24px; width: 26px; padding: 0; border-radius: 6px; line-height: 1; font-size: 13px;
+    border: 1px solid rgba(226, 232, 240, .28); background: rgba(255, 255, 255, .08); color: #e2e8f0;
+  }
+  #modal .vzoom button:hover { background: rgba(255, 255, 255, .18); }
+  #modal .vzoom #zoomLabel { min-width: 44px; text-align: center; font-variant-numeric: tabular-nums; }
+  #modal .vzoom #btnZoomFit { width: auto; padding: 0 8px; font-size: 11.5px; }
+  #modal .vzoom #zoomHint { color: #9fb0c7; font-size: 11px; padding-right: 2px; }
+  #modal .cap {
+    padding: 6px 12px; font-size: 11.5px; color: var(--muted); border-top: 1px solid var(--line);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: #fff;
+  }
+  @media (max-width: 620px) {
+    #modal .vh { flex-wrap: wrap; }
+    #modal .vh .vr { width: 100%; justify-content: flex-end; flex-wrap: wrap; }
+    #modal .cap { white-space: normal; }
+    #modal .viewer { height: 96vh; }
+  }
+
+  #settings .card, #account .card {
+    width: 100%; max-width: 760px; max-height: 90vh; overflow: auto;
+    background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 22px 24px;
+    box-shadow: 0 18px 40px rgba(16, 24, 40, .18);
+  }
+  #account .card { max-width: 460px; }
+  #settings h3, #account h3 { margin: 0 0 4px; font-size: 16px; font-weight: 650; }
+  #settings .sec { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); }
+  #settings .sec h4 { margin: 0 0 12px; font-size: 11.5px; text-transform: uppercase; letter-spacing: .7px; color: var(--muted); font-weight: 600; }
+  #settings .fields, #account .fields { display: grid; gap: 12px; grid-template-columns: 1fr 1fr; }
+  #settings .fields .full, #account .fields .full { grid-column: 1 / -1; }
+  @media (max-width: 620px) { #settings .fields, #account .fields { grid-template-columns: 1fr; } }
+  #settings .devices { display: grid; gap: 8px; margin-bottom: 10px; }
+  #settings .device { display: grid; grid-template-columns: 1.3fr 1fr .7fr auto; gap: 8px; align-items: center; }
+  #settings .devices-head { display: grid; grid-template-columns: 1.3fr 1fr .7fr auto; gap: 8px; margin-bottom: 6px; }
+  #settings .devices-head span { font-size: 11px; color: var(--muted); font-weight: 600; }
+  @media (max-width: 620px) {
+    #settings .device, #settings .devices-head { grid-template-columns: 1fr; }
+    #settings .devices-head { display: none; }
+  }
+  #settings .users { display: grid; gap: 8px; }
+  #settings .user-row { display: grid; grid-template-columns: 1.1fr .9fr 1fr auto; gap: 8px; align-items: center; }
+  #settings .users-head { display: grid; grid-template-columns: 1.1fr .9fr 1fr auto; gap: 8px; margin-bottom: 6px; }
+  #settings .users-head span { font-size: 11px; color: var(--muted); font-weight: 600; }
+  #settings .user-row .u-name { background: #f7f9fc; }
+  @media (max-width: 620px) {
+    #settings .user-row, #settings .users-head { grid-template-columns: 1fr; }
+    #settings .users-head { display: none; }
+  }
+  #settings .apidoc { font-size: 12.5px; }
+  #settings .apidoc details { margin-top: 12px; }
+  #settings .apidoc summary { cursor: pointer; font-size: 11.5px; text-transform: uppercase; letter-spacing: .7px; color: var(--muted); font-weight: 600; }
+  #settings .apidoc summary:hover { color: var(--accent); }
+  #settings .apidoc table { margin-top: 10px; font-size: 12px; }
+  #settings .apidoc th, #settings .apidoc td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+  #settings .apidoc th { background: transparent; }
+  #settings .apidoc td.path { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; color: #0b5aa5; white-space: nowrap; }
+  #settings .apidoc th:last-child, #settings .apidoc td:last-child { white-space: nowrap; }
+  #settings pre {
+    margin: 8px 0 0; padding: 11px 13px; background: #f7f9fc; border: 1px solid var(--line); border-radius: 8px;
+    overflow: auto; max-height: 260px; color: #1f2937;
+    font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 11.5px; line-height: 1.55; white-space: pre;
+  }
+  #settings .apidoc .row { gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  #settings .apidoc code { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; color: #0b5aa5; background: #f1f5fa; padding: 0 4px; border-radius: 4px; }
+
+  .spin { display: inline-block; width: 12px; height: 12px; border: 2px solid #d6dde6; border-top-color: var(--accent); border-radius: 50%; animation: rot .7s linear infinite; }
+  @keyframes rot { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<!-- ============ LOGIN ============ -->
+<div id="login">
+  <form class="card" id="loginForm">
+    <img class="login-logo" src="assets/logo-ris.png" alt="RIS-HLS PATROL">
+    <h1>RIS-HLS PATROL</h1>
+    <p class="sub">PACS Bridge API Worklist DICOM<br>Masuk untuk mengelola worklist dan melihat gambar pemeriksaan.</p>
+
+    <div class="field">
+      <label for="lUser">Username</label>
+      <input id="lUser" autocomplete="username" required>
+    </div>
+    <div class="field">
+      <label for="lPass">Password</label>
+      <input id="lPass" type="password" autocomplete="current-password" required>
+    </div>
+
+    <button class="primary" style="width:100%" id="btnLogin" type="submit">Masuk</button>
+    <div class="err" id="loginErr"></div>
+  </form>
+</div>
+
+<!-- ============ SHELL ============ -->
+<div id="shell" class="hidden">
+  <header class="top">
+    <div class="brand">
+      <img class="brand-logo" src="assets/logo-ris.png" alt="RIS-HLS PATROL">
+      <div>
+        <h1>RIS-HLS PATROL</h1>
+        <p class="brand-sub">PACS Bridge API Worklist DICOM</p>
+        <p id="serverLine">menghubungkan…</p>
+      </div>
+    </div>
+
+    <div class="status" title="Koneksi REST ke Orthanc">
+      <span class="dot" id="statusDot"></span>
+      <span id="statusText">Memeriksa koneksi…</span>
+    </div>
+
+    <div class="status" id="worklistStatus" title="Service Modality Worklist (plugin orthanc-worklists)">
+      <span class="dot" id="worklistDot"></span>
+      <span id="worklistStatusText">Worklist…</span>
+    </div>
+
+    <div class="spacer"></div>
+
+    <span class="muted" id="lastUpdate">—</span>
+    <div class="user">
+      <span id="userName">admin</span>
+      <span class="tag" id="userRole">manager</span>
+      <span class="tag warn" id="pwdWarn" title="Password masih default — ganti di Pengaturan" hidden>⚠<span class="lbl"> password default</span></span>
+    </div>
+    <button class="ghost" id="btnAccount" title="Ganti password akun saya">Akun</button>
+    <button class="ghost" id="btnSettings">⚙<span class="lbl"> Pengaturan</span></button>
+    <button class="ghost" id="btnRefresh">⟳<span class="lbl"> Refresh</span></button>
+    <button class="ghost" id="btnLogout">Keluar</button>
+  </header>
+
+  <main>
+    <section class="stats">
+      <div class="stat"><div class="label">Study</div><div class="value" id="statStudies">—</div><div class="sub">total di PACS</div></div>
+      <div class="stat"><div class="label">Pasien</div><div class="value" id="statPatients">—</div><div class="sub">total terdaftar</div></div>
+      <div class="stat"><div class="label">Instance</div><div class="value" id="statInstances">—</div><div class="sub">berkas gambar</div></div>
+      <div class="stat"><div class="label">Worklist</div><div class="value" id="statWorklist">—</div><div class="sub">order menunggu</div></div>
+    </section>
+
+    <div class="grid">
+      <!-- WORKLIST -->
+      <section class="panel worklist">
+        <header>
+          <div class="row">
+            <div>
+              <h2>Worklist (Modality Worklist)</h2>
+              <div class="hint">Order yang ditarik alat DX.</div>
+            </div>
+            <div class="spacer"></div>
+            <button class="ghost" id="btnWorklistRefresh">⟳</button>
+          </div>
+        </header>
+        <div class="body">
+          <div id="worklistBox"><div class="empty"><span class="spin"></span> memuat…</div></div>
+          <div style="height:1px;background:var(--line);margin:16px 0"></div>
+          <form class="order" id="orderForm">
+            <div class="full">
+              <label for="fName">Nama pasien</label>
+              <input id="fName" placeholder="TARYA BIN WARDI" required>
+            </div>
+            <div><label for="fTitle">Gelar</label><input id="fTitle" placeholder="Tn."></div>
+            <div><label for="fId">No. RM (PatientID)</label><input id="fId" placeholder="A048919" required></div>
+            <div>
+              <label for="fAcc">Accession (otomatis)</label>
+              <div class="row" style="gap:6px;flex-wrap:nowrap">
+                <input id="fAcc" placeholder="otomatis dari Orthanc" required>
+                <button type="button" class="ghost" id="btnNewAcc" title="Ambil nomor accession baru">⟳</button>
+              </div>
+            </div>
+            <div><label for="fProc">Pemeriksaan</label><input id="fProc" placeholder="THORAX PA" required></div>
+            <div class="full">
+              <label for="fDevice">Alat / Station tujuan</label>
+              <select id="fDevice"></select>
+            </div>
+            <div class="full row">
+              <button type="submit" class="primary" id="btnCreate">＋ Kirim ke Worklist</button>
+              <span class="muted">Nama otomatis dirapikan tanpa koma (aturan modalitas).</span>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <!-- STUDIES -->
+      <section class="panel">
+        <header>
+          <div class="row">
+            <div>
+              <h2>Study &amp; Gambar</h2>
+              <div class="hint" id="studyHint">Menampilkan study hari ini.</div>
+            </div>
+          </div>
+        </header>
+        <div class="body">
+          <div class="studies-tools">
+            <div class="mod-tabs" id="modTabs" role="tablist" title="Saring study menurut modalitas"></div>
+            <div class="row">
+              <input id="searchInput" placeholder="Cari Accession / No. RM / Nama pasien" style="flex:1;min-width:150px">
+              <button id="btnSearch">Cari</button>
+            </div>
+            <div class="row">
+              <input id="dateInput" type="date" style="max-width:170px">
+              <button id="btnToday" class="ghost">Hari ini</button>
+              <button id="btnAll" class="ghost">Semua tanggal</button>
+            </div>
+          </div>
+          <div id="studyBox" class="studies"></div>
+          <div class="row" id="studyMoreRow" style="margin-top:14px;display:none">
+            <button id="btnMore" class="ghost">Muat lebih banyak</button>
+            <span class="muted" id="studyCountNote"></span>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<!-- ============ SETTINGS ============ -->
+<div id="settings">
+  <div class="card">
+    <div class="row">
+      <div>
+        <h3>Pengaturan Bridge</h3>
+        <div class="muted" id="settingsEffective">—</div>
+      </div>
+      <div class="spacer"></div>
+      <button class="ghost" id="btnCloseSettings">Tutup</button>
+    </div>
+
+    <form id="settingsForm">
+      <div class="sec">
+        <h4>Koneksi Orthanc</h4>
+        <div class="fields">
+          <div><label for="sServerIp">Server IP</label><input id="sServerIp" placeholder="10.4.0.10"></div>
+          <div><label for="sHttpPort">Port REST (HTTP)</label><input id="sHttpPort" type="number" placeholder="8042"></div>
+          <div><label for="sDicomPort">Port DICOM</label><input id="sDicomPort" type="number" placeholder="4242"></div>
+          <div><label for="sTimeout">Timeout (detik)</label><input id="sTimeout" type="number" placeholder="30"></div>
+        </div>
+      </div>
+
+      <div class="sec">
+        <h4>AE Title</h4>
+        <div class="fields">
+          <div><label for="sCalled">Called AE Title (server)</label><input id="sCalled" placeholder="ORTHANC"></div>
+          <div><label for="sCalling">Calling AE Title (client)</label><input id="sCalling" placeholder="LEAD_CLIENT"></div>
+          <div><label for="sModality">Modality</label><input id="sModality" placeholder="DX"></div>
+          <div><label for="sClientIp">Client IP</label><input id="sClientIp" placeholder="192.168.200.230"></div>
+        </div>
+      </div>
+
+      <div class="sec" id="secDevices">
+        <h4>Alat Worklist (modality)</h4>
+        <div class="muted" style="margin-bottom:10px">
+          Daftar alat/station yang bisa dipilih saat mengirim order. AE Title dipakai sebagai
+          <code>ScheduledStationAETitle</code> di worklist, jadi pastikan sama dengan AET alat.
+        </div>
+        <div class="devices-head">
+          <span>Nama alat</span><span>AE Title</span><span>Modality</span><span></span>
+        </div>
+        <div class="devices" id="deviceBox"></div>
+        <button type="button" class="ghost" id="btnAddDevice">＋ Tambah alat</button>
+      </div>
+
+      <div class="sec">
+        <h4>Tampilan &amp; akses</h4>
+        <div class="fields">
+          <div>
+            <label for="sFilter">Filter study default</label>
+            <select id="sFilter">
+              <option value="today">Hari ini</option>
+              <option value="all">Semua tanggal</option>
+            </select>
+          </div>
+          <div>
+            <label for="sApiKey">API Key (opsional)</label>
+            <div class="row" style="gap:8px">
+              <input id="sApiKey" placeholder="kosong = pakai sesi login">
+              <button type="button" class="ghost" id="btnGenKey" title="Buat API key acak 48 karakter">Generate</button>
+              <button type="button" class="ghost danger" id="btnClearKey" style="display:none" title="Kosongkan API key (berlaku setelah Simpan)">Hapus</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sec" id="secUsers">
+        <h4>Pengguna dashboard (manager &amp; operator)</h4>
+        <div class="muted" style="margin-bottom:10px">
+          Akun <b>operator</b> bisa membuat order worklist, melihat gambar, dan mengunduh ZIP/JPG,
+          tetapi <b>tidak bisa</b> membuka Pengaturan, mengubah konfigurasi, atau mengelola user.
+        </div>
+        <div class="users-head">
+          <span>Username</span><span>Peran</span><span>Password baru (opsional)</span><span></span>
+        </div>
+        <div class="users" id="userBox"></div>
+        <div class="fields" style="margin-top:14px">
+          <div><label for="nuName">Username baru</label><input id="nuName" placeholder="operator1" autocomplete="off"></div>
+          <div><label for="nuPass">Password</label><input id="nuPass" type="password" placeholder="min. 4 karakter" autocomplete="new-password"></div>
+          <div>
+            <label for="nuRole">Peran</label>
+            <select id="nuRole">
+              <option value="operator">Operator (tanpa Pengaturan)</option>
+              <option value="admin">Manager (penuh)</option>
+            </select>
+          </div>
+          <div class="row" style="align-items:flex-end"><button type="button" class="ghost" id="btnAddUser">＋ Tambah user</button></div>
+        </div>
+      </div>
+
+      <div class="sec apidoc">
+        <h4>API Bridge — cara konek &amp; kemampuan</h4>
+        <div class="fields">
+          <div class="full">
+            <label for="apiBaseUrl">Base URL</label>
+            <div class="row" style="gap:8px">
+              <input id="apiBaseUrl" class="mono" readonly>
+              <button type="button" class="ghost" data-copy="#apiBaseUrl">Salin</button>
+            </div>
+          </div>
+          <div class="full muted">
+            Autentikasi program: header <code>X-API-Key: &lt;key&gt;</code> (isi field API Key di atas, lalu Simpan).
+            Key hanya dikirim lewat header — bukan query string/cookie/body. Kolom <strong>X-API-Key</strong>
+            di tabel bawah menandai endpoint yang boleh memakai key; sisanya butuh sesi login.
+          </div>
+          <div class="full" id="apiKeyStatus" style="font-size:12.5px">Status API key: —</div>
+          <div class="full">
+            <label for="apiKeyCurrent">API key yang sedang aktif</label>
+            <div class="row" style="gap:8px">
+              <input id="apiKeyCurrent" class="mono" readonly placeholder="belum ada — klik Generate lalu Simpan">
+              <button type="button" class="ghost" id="btnToggleKey">Sembunyikan</button>
+              <button type="button" class="ghost" data-copy="#apiKeyCurrent">Salin</button>
+            </div>
+          </div>
+        </div>
+
+        <details id="apiDocs" open>
+          <summary>Daftar endpoint &amp; contoh kode (curl / PHP / Python)</summary>
+
+          <table>
+            <thead><tr><th>Method</th><th>Path</th><th>Fungsi</th><th>X-API-Key</th></tr></thead>
+            <tbody>
+              <tr><td>POST</td><td class="path">/login</td><td>login dashboard → cookie sesi</td><td>publik</td></tr>
+              <tr><td>GET</td><td class="path">/me</td><td>status sesi (<code>via: session | api-key</code>)</td><td>publik</td></tr>
+              <tr><td>POST</td><td class="path">/logout</td><td>keluar</td><td>publik</td></tr>
+              <tr><td>GET</td><td class="path">/health</td><td>status Orthanc + jumlah study/pasien</td><td>✅</td></tr>
+              <tr><td>GET</td><td class="path">/accession</td><td>nomor accession baru (format alat Orthanc)</td><td>✅</td></tr>
+              <tr><td>GET</td><td class="path">/worklists</td><td>daftar order (worklist) yang ada di server</td><td>✅</td></tr>
+              <tr><td>POST</td><td class="path">/worklists</td><td><strong>kirim order ke modalitas</strong> (nama, No. RM, accession, prosedur)</td><td>✅</td></tr>
+              <tr><td>GET/PUT/DELETE</td><td class="path">/worklists/{id}</td><td>lihat / ubah / hapus satu order</td><td>✅</td></tr>
+              <tr><td>GET</td><td class="path">/studies?accession=</td><td>cari study hasil foto by accession</td><td>✅</td></tr>
+              <tr><td>GET</td><td class="path">/studies?name=</td><td>cari study partial nama pasien (mis. <code>adi watik</code>)</td><td>✅</td></tr>
+              <tr><td>GET</td><td class="path">/studies?patient_id=</td><td>riwayat study pasien by No. RM</td><td>✅</td></tr>
+              <tr><td>GET</td><td class="path">/studies/recent?date=today|all&amp;limit=</td><td>study terbaru (hari ini / semua tanggal)</td><td>✅</td></tr>
+              <tr><td>GET</td><td class="path">/studies/{acc}/jpg?quality=</td><td>gambar JPEG; tambah <code>&amp;watermark=1</code> untuk watermark (USG/EKG tanpa watermark)</td><td>✅</td></tr>
+              <tr><td>GET</td><td class="path">/studies/{acc}/png?width=</td><td>gambar PNG, bisa di-resize (thumbnail)</td><td>✅</td></tr>
+              <tr><td>GET</td><td class="path">/studies/{acc}/zip</td><td>unduh semua DICOM satu study</td><td>✅</td></tr>
+              <tr><td>GET</td><td class="path">/studies/{acc}/zip-jpg?quality=</td><td>ZIP berisi JPG ber-watermark, folder = No. RM (USG/EKG tanpa watermark)</td><td>✅</td></tr>
+              <tr><td>GET</td><td class="path">/studies/{acc}/images</td><td>daftar gambar study (instance)</td><td>✅</td></tr>
+              <tr><td>GET</td><td class="path">/instances/{id}/jpg?quality=</td><td>1 gambar instance (JPEG)</td><td>✅</td></tr>
+              <tr><td>GET</td><td class="path">/instances/{id}/file</td><td>unduh 1 file DICOM</td><td>✅</td></tr>
+              <tr><td>GET</td><td class="path">/settings</td><td>baca konfigurasi aktif (tanpa info API key)</td><td>✅</td></tr>
+              <tr><td>GET</td><td class="path">/settings/api-key</td><td>lihat API key utuh</td><td>❌ manager</td></tr>
+              <tr><td>PUT</td><td class="path">/settings</td><td>ubah konfigurasi</td><td>❌ manager</td></tr>
+              <tr><td>POST</td><td class="path">/settings/password</td><td>ganti password akun sendiri</td><td>❌ login</td></tr>
+              <tr><td>GET/POST</td><td class="path">/users</td><td>daftar / tambah user dashboard</td><td>❌ manager</td></tr>
+              <tr><td>PUT/DELETE</td><td class="path">/users/{username}</td><td>ubah peran / reset password / hapus user</td><td>❌ manager</td></tr>
+            </tbody>
+          </table>
+
+          <p class="muted" style="margin:8px 0 0">
+            Kolom <strong>X-API-Key</strong>: <code>✅</code> = boleh dipanggil program dengan header
+            <code>X-API-Key</code>; <code>❌</code> = ditolak <code>403</code> bila memakai key — harus sesi login
+            dashboard (manager). Tanpa key <em>dan</em> tanpa sesi selalu <code>401</code>.
+          </p>
+
+          <p class="muted" style="margin:8px 0 0">
+            Kunci study <code>{acc}</code> boleh <strong>Accession Number</strong>, <strong>ID Orthanc</strong>
+            (mis. <code>142ca2db-…</code>), atau <strong>StudyInstanceUID</strong> — berguna untuk study
+            yang dikirim alat tanpa accession (mis. workstation USG).
+          </p>
+
+          <div class="row"><span class="muted">Contoh curl</span><div class="spacer"></div><button type="button" class="ghost" data-copy="#apiCurl">Salin</button></div>
+          <pre id="apiCurl"></pre>
+
+          <div class="row"><span class="muted">Contoh PHP (CodeIgniter / native)</span><div class="spacer"></div><button type="button" class="ghost" data-copy="#apiPhp">Salin</button></div>
+          <pre id="apiPhp"></pre>
+
+          <div class="row"><span class="muted">Contoh Python</span><div class="spacer"></div><button type="button" class="ghost" data-copy="#apiPy">Salin</button></div>
+          <pre id="apiPy"></pre>
+
+          <div class="muted" style="margin-top:12px">
+            Dokumentasi lengkap (respons contoh, kode error, catatan operasional): <code>API.md</code>.
+            Koleksi siap pakai: <code>postman/</code> (import ke Postman, isi variabel <code>apiKey</code>).
+          </div>
+        </details>
+      </div>
+
+      <div class="row" style="margin-top:18px">
+        <button type="submit" class="primary" id="btnSaveSettings">Simpan Pengaturan</button>
+        <span class="muted">Berlaku untuk dashboard &amp; REST API (env PACS_* tetap prioritas).</span>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ============ AKUN (ganti password sendiri) ============ -->
+<div id="account">
+  <div class="card">
+    <div class="row">
+      <div>
+        <h3>Akun saya</h3>
+        <div class="muted" id="accountWho">—</div>
+      </div>
+      <div class="spacer"></div>
+      <button class="ghost" id="btnCloseAccount">Tutup</button>
+    </div>
+
+    <form id="passwordForm" class="fields" style="margin-top:16px">
+      <div><label for="pCurrent">Password lama</label><input id="pCurrent" type="password" autocomplete="current-password"></div>
+      <div><label for="pNew">Password baru</label><input id="pNew" type="password" autocomplete="new-password"></div>
+      <div class="full row">
+        <button type="submit" id="btnSavePassword">Simpan Password</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div id="modal">
+  <div class="viewer">
+    <div class="vh">
+      <div class="vt" id="modalTitle">—</div>
+      <div class="vr">
+        <a id="btnDlJpg" href="#" title="Unduh gambar JPEG beserta watermark">Unduh JPG</a>
+        <a id="btnDlZip" href="#" title="Unduh semua JPG study (ber-watermark) dalam satu folder No. RM">Unduh ZIP (JPG)</a>
+        <a id="btnDlZipDicom" href="#" title="Unduh semua file DICOM study sebagai ZIP">ZIP DICOM</a>
+        <button class="ghost" id="btnFullscreen" title="Layar penuh (F)">Full</button>
+        <button class="ghost" id="btnModalClose">Tutup</button>
+      </div>
+    </div>
+    <div class="vb" id="modalBody">
+      <img id="modalImg" alt="" draggable="false">
+      <div class="vzoom" id="modalZoomBar">
+        <span id="zoomHint">scroll = zoom</span>
+        <button type="button" id="btnZoomOut" title="Perkecil (−)">−</button>
+        <span id="zoomLabel">100%</span>
+        <button type="button" id="btnZoomIn" title="Perbesar (+)">+</button>
+        <button type="button" id="btnZoomFit" title="Sesuaikan ke layar (0)">Fit</button>
+      </div>
+      <div class="vload" id="modalLoading"><span class="spin"></span> memuat gambar…</div>
+    </div>
+    <div class="cap" id="modalCap"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  const basePath = (function () {
+    let p = location.pathname;
+    p = p.replace(/dashboard\/?$/i, '');
+    if (!p.endsWith('/')) p = p.substring(0, p.lastIndexOf('/') + 1);
+    return p || '/';
+  })();
+
+  const $ = (id) => document.getElementById(id);
+  const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const todayYmd = () => {
+    const d = new Date();
+    return d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
+  };
+  const ymdToInput = (v) => v && v.length === 8 ? v.slice(0, 4) + '-' + v.slice(4, 6) + '-' + v.slice(6, 8) : '';
+  const inputToYmd = (v) => (v || '').replace(/-/g, '');
+
+  let orthancBase = '';
+  let currentUser = null;
+  let currentRole = 'operator';
+  let defaultCreds = false;
+  let studyFilter = 'today';
+  let studyModality = '';
+  let pendingClearKey = false;
+  let studyLimit = 24;
+  let currentRecent = null;
+
+  // Satu sumber daftar tab modalitas: kode DICOM => label tab & label kalimat.
+  // Tambah modalitas baru cukup di sini (tab ikut dibuat otomatis).
+  const MODALITIES = {
+    DX: { tab: 'Ronsen (DX)', label: 'rontgen (DX)' },
+    CT: { tab: 'CT Scan (CT)', label: 'CT scan (CT)' },
+    US: { tab: 'USG (US)', label: 'USG (US)' },
+    ECG: { tab: 'EKG (ECG)', label: 'EKG (ECG)' },
+    PX: { tab: 'Panoramic (PX)', label: 'panoramic (PX)' }
+  };
+  // Modalitas yang citranya sudah memuat identitas pasien dari alat → tanpa watermark
+  // (harus sama dengan StudyService::NO_WATERMARK_MODALITIES di server).
+  const NO_WATERMARK_MODALITIES = ['US', 'ECG'];
+
+  const modalityCodes = (value) => String(value || '').toUpperCase().split('/').filter(Boolean);
+  const modalityLabel = (code) => (MODALITIES[code] ? MODALITIES[code].label : '');
+  const isNoWatermark = (value) => modalityCodes(value).some((m) => NO_WATERMARK_MODALITIES.indexOf(m) !== -1);
+
+  function renderModalityTabs() {
+    const buttons = ['<button type="button" class="active" data-mod="" role="tab">Semua</button>'];
+    Object.keys(MODALITIES).forEach((code) => {
+      buttons.push(`<button type="button" data-mod="${esc(code)}" role="tab">${esc(MODALITIES[code].tab)}</button>`);
+    });
+    $('modTabs').innerHTML = buttons.join('');
+  }
+
+  renderModalityTabs();
+
+  function toast(message, kind) {
+    const el = document.createElement('div');
+    el.className = kind || '';
+    el.textContent = message;
+    $('toast').appendChild(el);
+    setTimeout(() => el.remove(), 4200);
+  }
+
+  async function api(path, options) {
+    const res = await fetch(basePath + path, Object.assign({ headers: { Accept: 'application/json' } }, options || {}));
+    const text = await res.text();
+    let data = null;
+    try { data = text ? JSON.parse(text) : null; } catch (e) { data = { raw: text }; }
+    if (res.status === 401) {
+      showLogin();
+      throw new Error((data && (data.message || data.error)) || 'Sesi berakhir, silakan login');
+    }
+    if (!res.ok) throw new Error((data && (data.message || data.error)) || ('HTTP ' + res.status));
+    return data;
+  }
+
+  function showLogin() {
+    currentUser = null;
+    $('shell').classList.add('hidden');
+    $('login').style.display = 'grid';
+    $('lPass').value = '';
+    const target = $('lUser').value.trim() === '' ? $('lUser') : $('lPass');
+    setTimeout(() => target.focus(), 50);
+  }
+
+  function showShell(user, role) {
+    currentUser = user;
+    currentRole = role || 'operator';
+    $('login').style.display = 'none';
+    $('shell').classList.remove('hidden');
+    $('userName').textContent = user || 'admin';
+    $('userRole').textContent = currentRole === 'admin' ? 'manager' : 'operator';
+    $('btnSettings').style.display = currentRole === 'admin' ? '' : 'none';
+    $('pwdWarn').hidden = !defaultCreds;
+    if ($('accountWho')) {
+      $('accountWho').textContent = (user || '—') + ' · ' + (currentRole === 'admin' ? 'manager' : 'operator');
+    }
+    syncHeaderHeight();
+  }
+
+  async function refreshMe() {
+    try {
+      const me = await api('me');
+      defaultCreds = !!me.default_credentials;
+      if (me.authenticated) showShell(me.user, me.role);
+      else showLogin();
+    } catch (e) { /* biarkan */ }
+  }
+
+  // tinggi header (sticky) dipakai untuk offset toolbar study & panel worklist
+  function syncHeaderHeight() {
+    const h = document.querySelector('header.top');
+    if (!h) return;
+    const px = h.offsetHeight;
+    if (px > 0) document.documentElement.style.setProperty('--header-h', px + 'px');
+  }
+  window.addEventListener('resize', syncHeaderHeight);
+
+  function fmtDate(d, t) {
+    if (!d) return '—';
+    const s = String(d);
+    const date = s.length === 8 ? s.slice(0, 4) + '-' + s.slice(4, 6) + '-' + s.slice(6, 8) : s;
+    const time = t ? String(t).replace(/(\d{2})(\d{2})(\d{2}).*/, '$1:$2:$3') : '';
+    return (date + ' ' + time).trim();
+  }
+
+  /* ---------- auth ---------- */
+  $('loginForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = $('btnLogin');
+    btn.disabled = true;
+    $('loginErr').textContent = '';
+    try {
+      const res = await api('login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: $('lUser').value.trim(), password: $('lPass').value })
+      });
+      showShell(res.user, res.role);
+      boot();
+    } catch (err) {
+      $('loginErr').textContent = err.message;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  $('btnLogout').addEventListener('click', async () => {
+    try { await fetch(basePath + 'logout', { method: 'POST' }); } catch (e) {}
+    showLogin();
+  });
+
+  /* ---------- health & stats ---------- */
+  function renderWorklistStatus(info) {
+    const wl = info || {};
+    const badge = $('worklistStatus');
+    if (wl.reachable) {
+      $('worklistDot').className = 'dot ok';
+      $('worklistStatusText').textContent = 'Worklist terhubung'
+        + (typeof wl.count === 'number' ? ' · ' + wl.count + ' order' : '');
+      badge.title = 'Service Modality Worklist aktif (plugin orthanc-worklists)';
+    } else {
+      $('worklistDot').className = 'dot bad';
+      $('worklistStatusText').textContent = 'Worklist tidak terhubung';
+      badge.title = wl.error ? 'Worklist error: ' + wl.error : 'Service Modality Worklist tidak aktif';
+    }
+  }
+
+  async function loadHealth() {
+    try {
+      const h = await api('health');
+      orthancBase = (h.base_url || '').replace(/\/$/, '');
+      $('statusDot').className = 'dot ok';
+      $('statusText').textContent = 'Orthanc terhubung';
+      $('serverLine').textContent = 'AET ' + (h.dicom_aet || '?') + ' · ' + orthancBase.replace(/^https?:\/\//, '') + ' · v' + (h.version || '?');
+      $('statStudies').textContent = h.count_studies ?? '—';
+      $('statPatients').textContent = h.count_patients ?? '—';
+      $('statInstances').textContent = h.count_instances ?? '—';
+      renderWorklistStatus(h.worklist);
+      $('lastUpdate').textContent = 'diperbarui ' + new Date().toLocaleTimeString('id-ID');
+    } catch (e) {
+      $('statusDot').className = 'dot bad';
+      $('statusText').textContent = 'Orthanc tidak terhubung';
+      $('serverLine').textContent = e.message;
+      renderWorklistStatus({ reachable: false, error: 'Orthanc tidak terhubung' });
+    }
+  }
+
+  /* ---------- worklist ---------- */
+  async function loadWorklist() {
+    const box = $('worklistBox');
+    box.innerHTML = '<div class="empty"><span class="spin"></span> memuat…</div>';
+    try {
+      const list = await api('worklists');
+      const items = Array.isArray(list) ? list : [];
+      $('statWorklist').textContent = items.length;
+
+      if (items.length === 0) {
+        box.innerHTML = '<div class="empty">Belum ada order di worklist.'
+          + '<div style="margin-top:10px"><button class="ghost" id="btnEmptyDevice">⚙ Atur / tambah alat worklist</button></div></div>';
+        $('btnEmptyDevice').addEventListener('click', openSettings);
+        return;
+      }
+
+      box.innerHTML = `<table>
+        <thead><tr><th>Pasien</th><th>Accession</th><th>Pemeriksaan</th><th>Jadwal</th><th></th></tr></thead>
+        <tbody>${items.map((w) => {
+          const t = w.Tags || {};
+          const sps = (t.ScheduledProcedureStepSequence || [])[0] || {};
+          return `<tr>
+            <td><div style="font-weight:600">${esc(t.PatientName)}</div><div class="muted mono">${esc(t.PatientID || '')}</div></td>
+            <td class="mono">${esc(t.AccessionNumber || '—')}</td>
+            <td>${esc(sps.ScheduledProcedureStepDescription || '—')}<div class="muted">${esc(sps.Modality || '')} · ${esc(sps.ScheduledStationAETitle || '')}</div></td>
+            <td class="mono">${esc(fmtDate(sps.ScheduledProcedureStepStartDate, sps.ScheduledProcedureStepStartTime))}</td>
+            <td style="text-align:right"><button class="danger" data-del="${esc(w.ID)}">Hapus</button></td>
+          </tr>`;
+        }).join('')}</tbody></table>`;
+
+      box.querySelectorAll('button[data-del]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          if (!confirm('Hapus order ini dari worklist?')) return;
+          btn.disabled = true;
+          try {
+            await api('worklists/' + encodeURIComponent(btn.dataset.del), { method: 'DELETE' });
+            toast('Order dihapus', 'ok');
+            loadWorklist();
+          } catch (e) {
+            toast('Gagal hapus: ' + e.message, 'err');
+            btn.disabled = false;
+          }
+        });
+      });
+    } catch (e) {
+      box.innerHTML = '<div class="empty">Gagal memuat worklist: ' + esc(e.message) + '</div>';
+    }
+  }
+
+  async function fillAccession(showError) {
+    const input = $('fAcc');
+    try {
+      const res = await api('accession');
+      input.value = res.accession_number || '';
+    } catch (e) {
+      input.value = '';
+      if (showError) toast('Gagal ambil nomor accession: ' + e.message, 'err');
+    }
+  }
+
+  $('btnNewAcc').addEventListener('click', () => fillAccession(true));
+
+  $('orderForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = $('btnCreate');
+    btn.disabled = true;
+    try {
+      const created = await api('worklists', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          patient_name: $('fName').value.trim(),
+          title: $('fTitle').value.trim(),
+          patient_id: $('fId').value.trim(),
+          accession_number: $('fAcc').value.trim(),
+          procedure: $('fProc').value.trim(),
+          modality: currentDevice().modality,
+          station_aet: currentDevice().aet
+        })
+      });
+      toast('Order terkirim: ' + (created.patient_name || ''), 'ok');
+      $('orderForm').reset();
+      fillAccession();
+      loadWorklist();
+    } catch (err) {
+      toast('Gagal kirim order: ' + err.message, 'err');
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  /* ---------- studies ---------- */
+  function studyCard(s) {
+    const tags = s.MainDicomTags || {};
+    const pat = s.PatientMainDicomTags || {};
+    const acc = tags.AccessionNumber || '';
+    const uid = tags.StudyInstanceUID || '';
+    // Study tanpa AccessionNumber (mis. kiriman workstation USG) tetap bisa
+    // dibuka: API menerima accession, ID Orthanc, atau UID sebagai kunci.
+    const key = acc || (s.ID || '');
+    const modality = tags.Modality ? ` · <span class="tag">${esc(tags.Modality)}</span>` : '';
+    const img = key
+      ? `<img src="${basePath}studies/${encodeURIComponent(key)}/png?width=320" alt="" decoding="async" onerror="this.parentNode.classList.add('noimg');this.remove()">`
+      : '<span class="muted">tanpa gambar</span>';
+    const viewer = orthancBase && uid
+      ? `<a href="${orthancBase}/stone-webviewer/index.html?study=${encodeURIComponent(uid)}" target="_blank" rel="noopener">Viewer</a>` : '';
+    const dlBase = acc ? esc(acc) : (pat.PatientID ? esc(pat.PatientID) : esc(key));
+    // USG & EKG tidak diberi watermark (citra sudah memuat identitas pasien dari alat).
+    const noWatermark = isNoWatermark(tags.Modality);
+    const zip = key ? `<a href="${basePath}studies/${encodeURIComponent(key)}/zip" download="${dlBase}.zip" title="ZIP berisi semua file DICOM">ZIP (DICOM)</a>` : '';
+    const zipJpgTitle = noWatermark
+      ? 'ZIP berisi semua JPG tanpa watermark (folder No. RM)'
+      : 'ZIP berisi semua JPG ber-watermark (folder No. RM)';
+    const zipJpg = key
+      ? `<a href="${basePath}studies/${encodeURIComponent(key)}/zip-jpg?quality=90" download="${esc(pat.PatientID || key)}.zip" title="${zipJpgTitle}">ZIP (JPG)</a>` : '';
+    const viewerData = [
+      `data-key="${esc(key)}"`,
+      `data-acc="${esc(acc)}"`,
+      `data-name="${esc(pat.PatientName || '')}"`,
+      `data-pid="${esc(pat.PatientID || '')}"`,
+      `data-mod="${esc(tags.Modality || '')}"`
+    ].join(' ');
+    const full = key ? `<button class="primary view-btn" data-view="1" ${viewerData}>Lihat gambar</button>` : '';
+
+    return `<article class="study">
+      <div class="thumb" ${key ? 'data-view="1" ' + viewerData : ''}>${img}</div>
+      <div class="meta">
+        <div class="name">${esc(pat.PatientName || '(tanpa nama)')}</div>
+        <div class="sub mono">${esc(pat.PatientID || '')} ${acc ? '· ' + esc(acc) : ''}</div>
+        <div class="sub">${esc(fmtDate(tags.StudyDate, tags.StudyTime))}${modality}</div>
+      </div>
+      <div class="actions">${full}${zipJpg}${zip}${viewer}</div>
+    </article>`;
+  }
+
+  function renderStudies(list, emptyHtml) {
+    const box = $('studyBox');
+    const items = Array.isArray(list) ? list : [];
+    if (items.length === 0) {
+      box.innerHTML = '<div class="empty">' + (emptyHtml || 'Tidak ada study.') + '</div>';
+      return;
+    }
+    box.innerHTML = items.map(studyCard).join('');
+    box.querySelectorAll('[data-view]').forEach((el) => el.addEventListener('click', () => openModal(el.dataset)));
+  }
+
+  function appendOutside(outside) {
+    const box = $('studyBox');
+    const items = Array.isArray(outside && outside.studies) ? outside.studies : [];
+    if (items.length === 0) return;
+    const first = items[0].MainDicomTags || {};
+    const note = document.createElement('div');
+    note.className = 'outside-note';
+    note.innerHTML = '⚠ ' + (outside.count || items.length) + ' study bertanggal di luar filter ini ('
+      + esc(fmtDate(first.StudyDate, first.StudyTime)) + ') — jam mesin alat mungkin maju. '
+      + 'Study tetap ditampilkan di bawah supaya bisa dibuka; perbaiki tanggal &amp; jam alat agar ikut filter "Hari ini".';
+    const grid = document.createElement('div');
+    grid.className = 'studies outside-grid';
+    grid.innerHTML = items.map(studyCard).join('');
+    grid.querySelectorAll('[data-view]').forEach((el) => el.addEventListener('click', () => openModal(el.dataset)));
+    box.appendChild(note);
+    box.appendChild(grid);
+  }
+
+  async function loadRecent(dateParam, more) {
+    const ymd = dateParam === 'all' ? 'all' : (dateParam || inputToYmd($('dateInput').value) || todayYmd());
+    if (!more) studyLimit = 24;
+    currentRecent = ymd;
+    const mod = studyModality;
+    const modLabel = modalityLabel(mod);
+    $('studyHint').textContent = ymd === 'all'
+      ? 'Menampilkan study dari semua tanggal.'
+      : 'Menampilkan study tanggal ' + ymdToInput(ymd) + '.';
+    $('studyBox').innerHTML = '<div class="empty"><span class="spin"></span> memuat study…</div>';
+    $('studyMoreRow').style.display = 'none';
+    try {
+      const res = await api('studies/recent?limit=' + studyLimit + '&date=' + encodeURIComponent(ymd)
+        + (mod ? '&modality=' + encodeURIComponent(mod) : ''));
+      const list = Array.isArray(res.studies) ? res.studies : [];
+      const n = typeof res.count === 'number' ? res.count : list.length;
+      const empty = ymd === 'all'
+        ? 'Belum ada study di PACS.'
+        : (modLabel
+          ? 'Belum ada study ' + esc(modLabel) + ' pada tanggal ini.'
+          : 'Belum ada study pada tanggal ini. <button class="ghost" id="btnEmptyAll">Tampilkan semua tanggal</button>');
+      renderStudies(list, empty);
+      if (res.outside && Array.isArray(res.outside.studies) && res.outside.studies.length > 0) {
+        appendOutside(res.outside);
+      }
+
+      const per = (ymd === 'all' ? 'study terbaru' : 'study tanggal ' + ymdToInput(ymd))
+        + (modLabel ? ' · ' + modLabel : '');
+      $('studyHint').textContent = 'Menampilkan ' + n + ' ' + per + '.';
+      $('studyMoreRow').style.display = '';
+      if (n >= studyLimit) {
+        $('btnMore').style.display = '';
+        $('studyCountNote').textContent = 'Menampilkan ' + n + ' terbaru — kemungkinan masih ada lagi.';
+      } else {
+        $('btnMore').style.display = 'none';
+        $('studyCountNote').textContent = 'Total ' + n + ' ' + per + ' (semua sudah tampil).';
+      }
+
+      const allBtn = $('btnEmptyAll');
+      if (allBtn) allBtn.addEventListener('click', () => { $('dateInput').value = ''; loadRecent('all'); });
+    } catch (e) {
+      $('studyBox').innerHTML = '<div class="empty">Gagal memuat: ' + esc(e.message) + '</div>';
+    }
+  }
+
+  async function search() {
+    const q = $('searchInput').value.trim();
+    if (q === '') { loadRecent(); return; }
+    $('studyMoreRow').style.display = 'none';
+    $('studyHint').textContent = 'Mencari "' + q + '"…';
+    $('studyBox').innerHTML = '<div class="empty"><span class="spin"></span> mencari…</div>';
+    const found = (list, label) => {
+      renderStudies(list, 'Tidak ada study untuk "' + esc(q) + '".');
+      $('studyHint').textContent = list.length + ' study ' + label + ' "' + q + '".';
+    };
+    try {
+      const byAcc = await api('studies?accession=' + encodeURIComponent(q));
+      if (Array.isArray(byAcc) && byAcc.length > 0) {
+        found(byAcc, 'untuk accession');
+        return;
+      }
+      const byPid = await api('studies?patient_id=' + encodeURIComponent(q));
+      if (Array.isArray(byPid) && byPid.length > 0) {
+        found(byPid, 'untuk No. RM');
+        return;
+      }
+      // Nama pasien dicari parsial (mis. "adi watik" → ADI WATIK, NY / ADI^WATIK^NY).
+      const byName = await api('studies?name=' + encodeURIComponent(q));
+      found(Array.isArray(byName) ? byName : [], 'untuk nama');
+    } catch (e) {
+      $('studyBox').innerHTML = '<div class="empty">Gagal mencari: ' + esc(e.message) + '</div>';
+      $('studyHint').textContent = 'Pencarian gagal.';
+    }
+  }
+
+  let modalKey = '';
+  let modalInfo = null;
+
+  /* ---------- zoom pratinjau: scroll, pinch, geser, dobel klik ---------- */
+  const zoom = { fit: 1, scale: 1, x: 0, y: 0, ready: false };
+  const zoomPts = new Map();
+  let zoomPan = null;
+  let zoomPinch = null;
+
+  const ZOOM_MIN = 1;
+  const ZOOM_MAX = 8;
+
+  function zoomClamp() {
+    const img = $('modalImg');
+    const body = $('modalBody');
+    if (!img.naturalWidth || !img.naturalHeight) return;
+    const k = zoom.fit * zoom.scale;
+    const dw = img.naturalWidth * k;
+    const dh = img.naturalHeight * k;
+    const cw = body.clientWidth;
+    const ch = body.clientHeight;
+    zoom.x = dw <= cw ? (cw - dw) / 2 : Math.min(0, Math.max(cw - dw, zoom.x));
+    zoom.y = dh <= ch ? (ch - dh) / 2 : Math.min(0, Math.max(ch - dh, zoom.y));
+  }
+
+  function zoomApply() {
+    const img = $('modalImg');
+    const body = $('modalBody');
+    if (!img.naturalWidth || !img.naturalHeight) return;
+    zoom.cw = body.clientWidth;
+    zoom.ch = body.clientHeight;
+    zoomClamp();
+    img.style.transform = 'translate(' + zoom.x + 'px, ' + zoom.y + 'px) scale(' + (zoom.fit * zoom.scale) + ')';
+    $('zoomLabel').textContent = Math.round(zoom.scale * 100) + '%';
+    body.classList.toggle('zoomed', zoom.scale > 1.001);
+  }
+
+  function zoomFitScale() {
+    const img = $('modalImg');
+    const body = $('modalBody');
+    if (!img.naturalWidth || !img.naturalHeight) return 1;
+    return Math.min(body.clientWidth / img.naturalWidth, body.clientHeight / img.naturalHeight) || 1;
+  }
+
+  function zoomReset() {
+    zoom.scale = 1;
+    zoom.fit = zoomFitScale();
+    zoom.x = 0;
+    zoom.y = 0;
+    zoom.ready = true;
+    $('modalBody').classList.add('ready');
+    zoomApply();
+  }
+
+  function zoomAt(factor, clientX, clientY) {
+    const body = $('modalBody');
+    if (!zoom.ready || !isFinite(factor) || factor <= 0) return;
+    const next = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom.scale * factor));
+    if (Math.abs(next - zoom.scale) < 1e-4) return;
+
+    const rect = body.getBoundingClientRect();
+    const px = clientX - rect.left;
+    const py = clientY - rect.top;
+    const k0 = zoom.fit * zoom.scale;
+    const k1 = zoom.fit * next;
+    const u = (px - zoom.x) / k0;
+    const v = (py - zoom.y) / k0;
+
+    zoom.scale = next;
+    zoom.x = px - u * k1;
+    zoom.y = py - v * k1;
+    zoomApply();
+  }
+
+  function zoomCenter() {
+    const r = $('modalBody').getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  }
+
+  function zoomBy(factor) {
+    const c = zoomCenter();
+    zoomAt(factor, c.x, c.y);
+  }
+
+  function zoomEndPointers() {
+    zoomPts.clear();
+    zoomPinch = null;
+    zoomPan = null;
+    $('modalBody').classList.remove('panning');
+  }
+
+  (function bindZoom() {
+    const body = $('modalBody');
+
+    body.addEventListener('wheel', (e) => {
+      if (!zoom.ready) return;
+      e.preventDefault();
+      let dy = e.deltaY;
+      if (e.deltaMode === 1) dy *= 16;
+      else if (e.deltaMode === 2) dy *= body.clientHeight;
+      zoomAt(Math.exp(-dy * 0.0015), e.clientX, e.clientY);
+    }, { passive: false });
+
+    body.addEventListener('pointerdown', (e) => {
+      if (!zoom.ready || e.button > 0) return;
+      zoomPts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (zoomPts.size === 2) {
+        const [a, b] = Array.from(zoomPts.values());
+        zoomPinch = { dist: Math.hypot(a.x - b.x, a.y - b.y) || 1 };
+        zoomPan = null;
+        body.classList.remove('panning');
+        return;
+      }
+      if (zoom.scale <= 1.001) return;
+      zoomPan = { id: e.pointerId, x: e.clientX, y: e.clientY, ox: zoom.x, oy: zoom.y };
+      body.classList.add('panning');
+      if (body.setPointerCapture) {
+        try { body.setPointerCapture(e.pointerId); } catch (err) { /* abaikan */ }
+      }
+    });
+
+    body.addEventListener('pointermove', (e) => {
+      if (zoomPts.has(e.pointerId)) zoomPts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+      if (zoomPinch && zoomPts.size === 2) {
+        const [a, b] = Array.from(zoomPts.values());
+        const dist = Math.hypot(a.x - b.x, a.y - b.y) || 1;
+        zoomAt(dist / zoomPinch.dist, (a.x + b.x) / 2, (a.y + b.y) / 2);
+        zoomPinch.dist = dist;
+        return;
+      }
+
+      if (!zoomPan || e.pointerId !== zoomPan.id) return;
+      zoom.x = zoomPan.ox + (e.clientX - zoomPan.x);
+      zoom.y = zoomPan.oy + (e.clientY - zoomPan.y);
+      zoomApply();
+    });
+
+    ['pointerup', 'pointercancel'].forEach((ev) => {
+      body.addEventListener(ev, (e) => {
+        zoomPts.delete(e.pointerId);
+        if (zoomPts.size < 2) zoomPinch = null;
+        if (zoomPan && e.pointerId === zoomPan.id) {
+          zoomPan = null;
+          body.classList.remove('panning');
+        }
+      });
+    });
+
+    body.addEventListener('dblclick', (e) => {
+      if (!zoom.ready) return;
+      if (zoom.scale > 1.001) zoomReset();
+      else zoomAt(2.5, e.clientX, e.clientY);
+    });
+
+    $('btnZoomIn').addEventListener('click', () => zoomBy(1.5));
+    $('btnZoomOut').addEventListener('click', () => zoomBy(1 / 1.5));
+    $('btnZoomFit').addEventListener('click', zoomReset);
+  })();
+
+  function openModal(data) {
+    const key = data && data.key ? String(data.key) : '';
+    const acc = data && data.acc ? String(data.acc) : '';
+    if (!key) return;
+    modalKey = key;
+    modalInfo = { key, acc, name: data.name || '', pid: data.pid || '' };
+    const noWatermark = isNoWatermark(data.mod);
+
+    $('modalTitle').textContent = [modalInfo.name || '(tanpa nama)', modalInfo.pid ? 'RM ' + modalInfo.pid : '', acc]
+      .filter(Boolean).join(' · ');
+    const capText = (noWatermark
+      ? 'Tanpa watermark (citra USG/EKG sudah memuat identitas pasien). Scroll = zoom · geser = pan · '
+      : 'Watermark identitas pasien digambar server. Scroll = zoom · geser = pan · ')
+      + 'dobel klik = fit/200% · F = layar penuh · Esc = tutup.';
+    $('modalCap').textContent = capText;
+    $('modalCap').title = capText + (noWatermark
+      ? ' "Unduh JPG" & "Unduh ZIP (JPG)" = gambar asli tanpa watermark; "ZIP DICOM" = data asli dari Orthanc.'
+      : ' "Unduh JPG" = gambar ber-watermark; "Unduh ZIP (JPG)" = semua JPG study ber-watermark dalam satu folder No. RM;'
+        + ' "ZIP DICOM" = data asli dari Orthanc.');
+
+    const safe = (v) => String(v || '').replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^_+|_+$/g, '');
+    const jpgUrl = basePath + 'studies/' + encodeURIComponent(key) + '/jpg?quality=90'
+      + (noWatermark ? '' : '&watermark=1');
+    const jpgName = [safe(modalInfo.name), safe(modalInfo.pid), acc || key].filter(Boolean).join('_') || key;
+    $('btnDlJpg').href = jpgUrl;
+    $('btnDlJpg').setAttribute('download', jpgName + '.jpg');
+    $('btnDlZip').href = basePath + 'studies/' + encodeURIComponent(key) + '/zip-jpg?quality=90';
+    $('btnDlZip').setAttribute('download', (safe(modalInfo.pid) || acc || key) + '.zip');
+    $('btnDlZipDicom').href = basePath + 'studies/' + encodeURIComponent(key) + '/zip';
+    $('btnDlZipDicom').setAttribute('download', (acc || safe(modalInfo.pid) || key) + '.zip');
+
+    const img = $('modalImg');
+    img.style.display = 'none';
+    img.style.transform = '';
+    zoom.ready = false;
+    zoom.scale = 1;
+    zoomEndPointers();
+    $('modalBody').classList.remove('ready');
+    $('zoomLabel').textContent = '100%';
+    $('modalLoading').style.display = 'grid';
+    $('modalLoading').innerHTML = '<span class="spin"></span> memuat gambar…';
+    $('modal').classList.add('open');
+
+    img.onload = () => {
+      if (modalKey !== key) return;
+      img.style.display = 'block';
+      $('modalLoading').style.display = 'none';
+      zoomReset();
+    };
+    img.onerror = () => {
+      if (modalKey !== key) return;
+      $('modalBody').classList.remove('ready');
+      $('modalLoading').style.display = 'grid';
+      $('modalLoading').textContent = 'Gambar tidak dapat dimuat untuk accession ' + acc + '.';
+    };
+    img.src = jpgUrl;
+  }
+
+  function closeModal() {
+    if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
+    $('modal').classList.remove('open');
+    $('modalBody').classList.remove('ready');
+    zoom.ready = false;
+    zoomEndPointers();
+    modalKey = '';
+    modalInfo = null;
+  }
+
+  $('btnModalClose').addEventListener('click', closeModal);
+
+  $('btnModalClose').addEventListener('click', closeModal);
+
+  function toggleFullscreen() {
+    const viewer = document.querySelector('#modal .viewer');
+    if (!viewer || !viewer.requestFullscreen) return;
+    if (document.fullscreenElement) {
+      if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
+      return;
+    }
+    viewer.requestFullscreen().catch(() => {});
+  }
+
+  $('btnFullscreen').addEventListener('click', toggleFullscreen);
+  document.addEventListener('fullscreenchange', () => {
+    if (zoom.ready) zoomOnResize();
+  });
+
+  $('btnSearch').addEventListener('click', search);
+  $('searchInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') search(); });
+  $('dateInput').addEventListener('change', () => loadRecent());
+  $('btnToday').addEventListener('click', () => { $('dateInput').value = ymdToInput(todayYmd()); loadRecent(todayYmd()); });
+  $('btnAll').addEventListener('click', () => { $('dateInput').value = ''; loadRecent('all'); });
+  $('modTabs').addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-mod]');
+    if (!btn) return;
+    studyModality = btn.dataset.mod || '';
+    $('modTabs').querySelectorAll('button[data-mod]').forEach((b) => b.classList.toggle('active', b === btn));
+    loadRecent();
+  });
+  $('btnMore').addEventListener('click', () => { studyLimit += 24; loadRecent(currentRecent === null ? undefined : currentRecent, true); });
+
+  /* ---------- alat worklist ---------- */
+  let worklistDevices = [];
+
+  function normalizeDevices(list, fallback) {
+    const out = (Array.isArray(list) ? list : [])
+      .filter((d) => d && (d.aet || d.name))
+      .map((d) => ({
+        name: String(d.name || d.aet || '').trim(),
+        // AE Title tidak di-uppercase: MWL mencocokkan ScheduledStationAETitle peka huruf.
+        aet: String(d.aet || '').trim(),
+        modality: String(d.modality || fallback.modality || 'DX').trim().toUpperCase()
+      }));
+    if (out.length > 0) return out;
+
+    return [{
+      name: String(fallback.name || fallback.aet || 'Alat utama'),
+      aet: String(fallback.aet || '').trim(),
+      modality: String(fallback.modality || 'DX').toUpperCase()
+    }];
+  }
+
+  function currentDevice() {
+    const dev = worklistDevices[Number($('fDevice').value)];
+    return dev || worklistDevices[0] || { name: 'Alat utama', aet: '', modality: 'DX' };
+  }
+
+  function renderDeviceSelect(devices) {
+    const sel = $('fDevice');
+    const prev = sel.value;
+    sel.innerHTML = devices.map((d, i) => {
+      const label = d.name && d.name !== d.aet
+        ? d.name + ' · ' + d.aet + ' · ' + d.modality
+        : d.aet + ' · ' + d.modality;
+      return `<option value="${i}">${esc(label)}</option>`;
+    }).join('');
+    if (prev !== '' && sel.querySelector('option[value="' + prev + '"]')) sel.value = prev;
+  }
+
+  function deviceRowHtml(d) {
+    return `<div class="device" data-device>
+      <input class="d-name" placeholder="Nama alat (mis. DX-1)" value="${esc(d.name || '')}">
+      <input class="d-aet mono" placeholder="LEAD_CLIENT" value="${esc(d.aet || '')}">
+      <input class="d-mod mono" placeholder="DX" value="${esc(d.modality || '')}">
+      <button type="button" class="ghost danger" data-del-device title="Hapus alat">Hapus</button>
+    </div>`;
+  }
+
+  function addDeviceRow(d) {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = deviceRowHtml(d || {});
+    const row = wrap.firstElementChild;
+    $('deviceBox').appendChild(row);
+    row.querySelector('[data-del-device]').addEventListener('click', () => {
+      row.remove();
+      if ($('deviceBox').children.length === 0) addDeviceRow({});
+    });
+  }
+
+  function renderDeviceRows(devices) {
+    $('deviceBox').innerHTML = '';
+    (devices.length > 0 ? devices : [{}]).forEach((d) => addDeviceRow(d));
+  }
+
+  function collectDevices() {
+    return Array.from($('deviceBox').querySelectorAll('[data-device]'))
+      .map((row) => ({
+        name: row.querySelector('.d-name').value.trim(),
+        aet: row.querySelector('.d-aet').value.trim(),
+        modality: row.querySelector('.d-mod').value.trim().toUpperCase()
+      }))
+      .filter((d) => d.name !== '' || d.aet !== '');
+  }
+
+  function fallbackDevice(s, eff) {
+    const aet = (s && s.calling_aet) || (eff && eff.calling_aet) || 'LEAD_CLIENT';
+    return {
+      name: aet,
+      aet,
+      modality: (s && s.modality) || (eff && eff.modality) || 'DX'
+    };
+  }
+
+  async function loadDevices() {
+    try {
+      const res = await api('settings');
+      const s = res.settings || {};
+      worklistDevices = normalizeDevices(s.worklist_devices, fallbackDevice(s, res.effective || {}));
+    } catch (e) {
+      worklistDevices = normalizeDevices([], fallbackDevice({}, {}));
+    }
+    renderDeviceSelect(worklistDevices);
+  }
+
+  $('btnAddDevice').addEventListener('click', () => addDeviceRow({}));
+
+  /* ---------- settings ---------- */
+  async function openSettings() {
+    $('settings').classList.add('open');
+    $('btnSaveSettings').disabled = true;
+    try {
+      const res = await api('settings');
+      const s = res.settings || {};
+      const eff = res.effective || {};
+
+      $('sServerIp').value = s.server_ip || '';
+      $('sHttpPort').value = s.http_port || eff.http_port || '';
+      $('sDicomPort').value = s.dicom_port || eff.dicom_port || '';
+      $('sTimeout').value = s.timeout || 30;
+      $('sCalled').value = s.called_aet || '';
+      $('sCalling').value = s.calling_aet || '';
+      $('sModality').value = s.modality || eff.modality || '';
+      $('sClientIp').value = s.client_ip || '';
+      $('sFilter').value = s.study_filter || 'today';
+      renderDeviceRows(normalizeDevices(s.worklist_devices, fallbackDevice(s, eff)));
+      $('sApiKey').value = '';
+      $('sApiKey').placeholder = s.has_api_key ? '(sudah diset — isi untuk mengganti)' : 'kosong = pakai sesi login';
+      pendingClearKey = false;
+      $('btnClearKey').style.display = s.has_api_key ? '' : 'none';
+      loadUsers();
+
+      try {
+        const current = await api('settings/api-key');
+        $('apiKeyCurrent').value = current.api_key || '';
+        $('apiKeyCurrent').type = 'text';
+        $('btnToggleKey').textContent = 'Sembunyikan';
+      } catch (err) {
+        $('apiKeyCurrent').value = '';
+      }
+      $('apiKeyStatus').innerHTML = s.has_api_key
+        ? '<span style="color:var(--ok,#4ade80)">●</span> API key <strong>aktif</strong> — program bisa memanggil API dengan header <code>X-API-Key</code>.'
+        : '<span style="color:var(--muted)">●</span> API key <strong>belum diset</strong> — API hanya bisa diakses lewat sesi login dashboard ini.';
+
+      $('settingsEffective').textContent = 'Aktif sekarang: ' + (eff.base_url || '—') +
+        ' · AET ' + (eff.called_aet || '?') + ' · DICOM ' + (eff.dicom_port || '?');
+      studyFilter = s.study_filter || 'today';
+      $('btnSaveSettings').disabled = false;
+    } catch (e) {
+      toast('Gagal memuat pengaturan: ' + e.message, 'err');
+    }
+  }
+
+  $('btnSettings').addEventListener('click', openSettings);
+  $('btnCloseSettings').addEventListener('click', () => $('settings').classList.remove('open'));
+
+  /* ---------- dokumentasi API (di panel pengaturan) ---------- */
+  async function copyText(text) {
+    const fallback = () => {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.top = '-1000px';
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand('copy');
+      ta.remove();
+      if (!ok) throw new Error('clipboard tidak didukung browser');
+    };
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        fallback();
+      }
+      toast('Disalin ke clipboard');
+    } catch (e) {
+      try {
+        fallback();
+        toast('Disalin ke clipboard');
+      } catch (e2) {
+        toast('Gagal menyalin: ' + e2.message, 'err');
+      }
+    }
+  }
+
+  function buildApiDocs() {
+    const origin = location.origin + basePath;
+    const base = origin.replace(/\/$/, '');
+    $('apiBaseUrl').value = origin;
+
+    $('apiCurl').textContent = [
+      'BASE="' + base + '"',
+      'KEY="<API_KEY>"',
+      '',
+      '# 1) cek koneksi',
+      'curl -H "X-API-Key: $KEY" "$BASE/health"',
+      '',
+      '# 2) kirim order ke worklist (modalitas menerima nama pasien)',
+      'curl -X POST "$BASE/worklists" \\',
+      '  -H "X-API-Key: $KEY" -H "Content-Type: application/json" \\',
+      '  -d \'{"patient_name":"BUDI SANTOSO","title":"Tn.","patient_id":"A000001",',
+      '       "accession_number":"A260100001","procedure":"THORAX PA"}\'',
+      '',
+      '# 3) cari hasil foto lalu ambil gambarnya',
+      'curl -H "X-API-Key: $KEY" "$BASE/studies?accession=A260100001"',
+      'curl -H "X-API-Key: $KEY" "$BASE/studies/A260100001/jpg?quality=90" -o hasil.jpg',
+      '',
+      '# 4) unduh semua DICOM satu study',
+      'curl -H "X-API-Key: $KEY" "$BASE/studies/A260100001/zip" -o study.zip',
+      '',
+      '# 5) unduh semua gambar sebagai JPG ber-watermark (folder = No. RM)',
+      'curl -H "X-API-Key: $KEY" "$BASE/studies/A260100001/zip-jpg?quality=90" -o A000001.zip',
+      '',
+      '# 6) gambar tunggal ber-watermark',
+      'curl -H "X-API-Key: $KEY" "$BASE/studies/A260100001/jpg?watermark=1" -o hasil.jpg'
+    ].join('\n');
+
+    $('apiPhp').textContent = [
+      "require 'src/autoload.php';",
+      '',
+      'use Simrs\\Pacs\\BridgeApiClient;',
+      '',
+      "$api = new BridgeApiClient('" + origin + "', getenv('PACS_BRIDGE_KEY'));",
+      '',
+      '$api->health();                                  // cek koneksi Orthanc',
+      '$api->createWorklist([                           // kirim order ke modalitas',
+      "    'patient_name'     => $pasien['nama'],",
+      "    'title'            => $pasien['gelar'],",
+      "    'patient_id'       => $pasien['no_rm'],",
+      "    'accession_number' => $order['accession'],",
+      "    'procedure'        => $order['pemeriksaan'],",
+      ']);',
+      '',
+      "$jpg = $api->jpegByAccession($order['accession'], 90);   // ['content','mime','filename']",
+      "$zip = $api->zipByAccession($order['accession']);        // biner ZIP",
+      '',
+      '// CodeIgniter: library siap pakai ada di integrations/codeigniter/'
+    ].join('\n');
+
+    $('apiPy').textContent = [
+      'import os, requests',
+      'BASE = "' + base + '"',
+      'H = {"X-API-Key": os.environ["PACS_BRIDGE_KEY"]}',
+      '',
+      'print(requests.get(f"{BASE}/health", headers=H, timeout=30).json())',
+      '',
+      'requests.post(f"{BASE}/worklists", headers=H, timeout=30, json={',
+      '    "patient_name": "BUDI SANTOSO", "title": "Tn.", "patient_id": "A000001",',
+      '    "accession_number": "A260100001", "procedure": "THORAX PA"})',
+      '',
+      'img = requests.get(f"{BASE}/studies/A260100001/jpg?quality=90", headers=H, timeout=60)',
+      'open("hasil.jpg", "wb").write(img.content)'
+    ].join('\n');
+  }
+
+  buildApiDocs();
+
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-copy]');
+    if (!btn) return;
+    const el = document.querySelector(btn.dataset.copy);
+    if (!el) return;
+    copyText(el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' ? el.value : el.textContent);
+  });
+
+  /* ---------- user dashboard (manager & operator) ---------- */
+  function userRowHtml(u) {
+    return `<div class="user-row" data-user="${esc(u.username)}">
+      <input class="u-name mono" value="${esc(u.username)}" readonly>
+      <select class="u-role">
+        <option value="operator"${u.role === 'operator' ? ' selected' : ''}>Operator</option>
+        <option value="admin"${u.role === 'admin' ? ' selected' : ''}>Manager</option>
+      </select>
+      <input class="u-pass" type="password" placeholder="(kosongkan = tetap)" autocomplete="new-password">
+      <div class="row" style="gap:6px">
+        <button type="button" class="ghost" data-save-user>Simpan</button>
+        <button type="button" class="ghost danger" data-del-user${u.is_self ? ' disabled title="Tidak bisa menghapus akun yang sedang dipakai"' : ''}>Hapus</button>
+      </div>
+    </div>`;
+  }
+
+  async function loadUsers() {
+    if (currentRole !== 'admin' || !$('userBox')) return;
+    try {
+      const res = await api('users');
+      const list = Array.isArray(res.users) ? res.users : [];
+      $('userBox').innerHTML = list.map(userRowHtml).join('') || '<div class="muted">belum ada user</div>';
+    } catch (err) {
+      $('userBox').innerHTML = '<div class="muted">' + esc(err.message) + '</div>';
+    }
+  }
+
+  $('userBox').addEventListener('click', async (e) => {
+    const row = e.target.closest('[data-user]');
+    if (!row) return;
+    const username = row.dataset.user;
+    try {
+      if (e.target.closest('[data-save-user]')) {
+        const payload = { role: row.querySelector('.u-role').value };
+        const pwd = row.querySelector('.u-pass').value;
+        if (pwd !== '') payload.password = pwd;
+        await api('users/' + encodeURIComponent(username), {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        toast('User ' + username + ' diperbarui', 'ok');
+        await loadUsers();
+        await refreshMe();
+      } else if (e.target.closest('[data-del-user]')) {
+        if (!confirm('Hapus user ' + username + '?')) return;
+        await api('users/' + encodeURIComponent(username), { method: 'DELETE' });
+        toast('User ' + username + ' dihapus', 'ok');
+        await loadUsers();
+      }
+    } catch (err) {
+      toast('Gagal: ' + err.message, 'err');
+    }
+  });
+
+  $('btnAddUser').addEventListener('click', async () => {
+    const username = $('nuName').value.trim();
+    const password = $('nuPass').value;
+    const role = $('nuRole').value;
+    if (username === '' || password === '') {
+      toast('Username dan password wajib diisi', 'err');
+      return;
+    }
+    $('btnAddUser').disabled = true;
+    try {
+      await api('users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password, role })
+      });
+      $('nuName').value = '';
+      $('nuPass').value = '';
+      $('nuRole').value = 'operator';
+      toast('User ' + username + ' ditambahkan', 'ok');
+      await loadUsers();
+    } catch (err) {
+      toast('Gagal menambah user: ' + err.message, 'err');
+    } finally {
+      $('btnAddUser').disabled = false;
+    }
+  });
+
+  /* ---------- akun (ganti password sendiri) ---------- */
+  function openAccount() {
+    $('accountWho').textContent = (currentUser || '—') + ' · ' + (currentRole === 'admin' ? 'manager' : 'operator');
+    $('account').classList.add('open');
+  }
+
+  $('btnAccount').addEventListener('click', openAccount);
+  $('btnCloseAccount').addEventListener('click', () => $('account').classList.remove('open'));
+  $('account').addEventListener('click', (e) => {
+    if (e.target === $('account')) $('account').classList.remove('open');
+  });
+
+  $('btnGenKey').addEventListener('click', () => {
+    const buf = new Uint8Array(24);
+    crypto.getRandomValues(buf);
+    $('sApiKey').value = Array.from(buf, (b) => b.toString(16).padStart(2, '0')).join('');
+    pendingClearKey = false;
+    $('btnClearKey').style.display = 'none';
+    toast('API key dibuat — klik "Simpan Pengaturan" untuk mengaktifkan');
+  });
+
+  $('btnClearKey').addEventListener('click', () => {
+    pendingClearKey = true;
+    $('sApiKey').value = '';
+    $('btnClearKey').style.display = 'none';
+    toast('API key akan dihapus setelah "Simpan Pengaturan"');
+  });
+
+  $('btnToggleKey').addEventListener('click', () => {
+    const el = $('apiKeyCurrent');
+    if (!el.value) return;
+    const show = el.type === 'password';
+    el.type = show ? 'text' : 'password';
+    $('btnToggleKey').textContent = show ? 'Sembunyikan' : 'Tampilkan';
+  });
+
+  $('settingsForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = $('btnSaveSettings');
+    btn.disabled = true;
+    try {
+      const payload = {
+        server_ip: $('sServerIp').value.trim(),
+        http_port: $('sHttpPort').value,
+        dicom_port: $('sDicomPort').value,
+        timeout: $('sTimeout').value,
+        called_aet: $('sCalled').value.trim(),
+        calling_aet: $('sCalling').value.trim(),
+        modality: $('sModality').value.trim(),
+        client_ip: $('sClientIp').value.trim(),
+        study_filter: $('sFilter').value,
+        worklist_devices: collectDevices()
+      };
+      const newKey = $('sApiKey').value.trim();
+      if (newKey !== '') payload.api_key = newKey;
+      else if (pendingClearKey) payload.api_key = '';
+
+      await api('settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      pendingClearKey = false;
+      toast('Pengaturan disimpan', 'ok');
+      $('settings').classList.remove('open');
+      loadDevices();
+      loadHealth();
+    } catch (err) {
+      toast('Gagal menyimpan: ' + err.message, 'err');
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  $('passwordForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = $('btnSavePassword');
+    btn.disabled = true;
+    try {
+      await api('settings/password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          current_password: $('pCurrent').value,
+          new_password: $('pNew').value
+        })
+      });
+      toast('Password diperbarui', 'ok');
+      $('passwordForm').reset();
+      $('account').classList.remove('open');
+      await refreshMe();
+    } catch (err) {
+      toast('Gagal ganti password: ' + err.message, 'err');
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  /* ---------- misc ---------- */
+  $('btnRefresh').addEventListener('click', () => { loadHealth(); loadWorklist(); loadRecent(); });
+  $('btnWorklistRefresh').addEventListener('click', loadWorklist);
+
+  $('modal').addEventListener('click', (e) => {
+    if (e.target === $('modal')) closeModal();
+  });
+  $('settings').addEventListener('click', (e) => {
+    if (e.target === $('settings')) $('settings').classList.remove('open');
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      closeModal();
+      $('settings').classList.remove('open');
+      $('account').classList.remove('open');
+      return;
+    }
+    if (!$('modal').classList.contains('open')) return;
+    if (e.key === 'f' || e.key === 'F') { e.preventDefault(); toggleFullscreen(); return; }
+    if (!zoom.ready) return;
+    if (e.key === '+' || e.key === '=') { e.preventDefault(); zoomBy(1.5); }
+    else if (e.key === '-' || e.key === '_') { e.preventDefault(); zoomBy(1 / 1.5); }
+    else if (e.key === '0') { e.preventDefault(); zoomReset(); }
+  });
+
+  function zoomOnResize() {
+    if (!zoom.ready) return;
+    const body = $('modalBody');
+    const img = $('modalImg');
+    const cw = body.clientWidth;
+    const ch = body.clientHeight;
+    if (!cw || !ch || !img.naturalWidth) return;
+
+    // saat fit cukup re-center; saat diperbesar pertahankan titik tengah gambar
+    if (zoom.scale <= 1.001 || !zoom.cw || !zoom.ch) {
+      zoomReset();
+      return;
+    }
+
+    const k = zoom.fit * zoom.scale;
+    const u = (zoom.cw / 2 - zoom.x) / k;
+    const v = (zoom.ch / 2 - zoom.y) / k;
+    zoom.fit = zoomFitScale();
+    const k2 = zoom.fit * zoom.scale;
+    zoom.x = cw / 2 - u * k2;
+    zoom.y = ch / 2 - v * k2;
+    zoomApply();
+  }
+  window.addEventListener('resize', zoomOnResize);
+
+  /* ---------- boot ---------- */
+  async function boot() {
+    $('dateInput').value = ymdToInput(todayYmd());
+    await loadHealth();
+    loadDevices();
+    fillAccession();
+    loadWorklist();
+    loadRecent(studyFilter === 'all' ? 'all' : todayYmd());
+    setInterval(() => { loadHealth(); loadWorklist(); }, 30000);
+  }
+
+  (async function init() {
+    try {
+      const me = await api('me');
+      defaultCreds = !!me.default_credentials;
+      if (me.authenticated) {
+        showShell(me.user, me.role);
+        boot();
+      } else {
+        showLogin();
+      }
+    } catch (e) {
+      showLogin();
+    }
+  })();
+})();
+</script>
+</body>
+</html>

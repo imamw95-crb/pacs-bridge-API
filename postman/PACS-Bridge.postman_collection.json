@@ -1,0 +1,339 @@
+{
+  "info": {
+    "_postman_id": "b7f3c1a2-4d5e-4f60-9a1b-2c3d4e5f6a7b",
+    "name": "RIS-HLS PATROL — PACS Bridge API Worklist DICOM",
+    "description": "Collection untuk menguji Bridge API SIMRS ↔ Orthanc.\n\nDua cara autentikasi:\n1. API KEY (disarankan untuk testing cepat): isi collection variable `apiKey` dengan key dari dashboard (⚙ Pengaturan → API Key). Key dikirim otomatis sebagai header `X-API-Key`.\n2. SESI LOGIN: jalankan request `Auth → Login` (admin/admin), cookie akan disimpan Postman; request lain memakai cookie itu.\n\nEndpoint yang butuh sesi (API key akan ditolak 403): `PUT /settings`, `POST /settings/password`.\n\nUbah `baseUrl` bila bridge dijalankan di host/port lain (mis. http://pacs-bridge.test).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "apikey",
+    "apikey": [
+      {
+        "key": "key",
+        "value": "X-API-Key",
+        "type": "string"
+      },
+      {
+        "key": "value",
+        "value": "{{apiKey}}",
+        "type": "string"
+      },
+      {
+        "key": "in",
+        "value": "header",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8081"
+    },
+    {
+      "key": "apiKey",
+      "value": ""
+    },
+    {
+      "key": "username",
+      "value": "admin"
+    },
+    {
+      "key": "password",
+      "value": "admin"
+    },
+    {
+      "key": "patientName",
+      "value": "TARYA BIN WARDI"
+    },
+    {
+      "key": "patientTitle",
+      "value": "Tn."
+    },
+    {
+      "key": "accession",
+      "value": "A261105038"
+    },
+    {
+      "key": "patientId",
+      "value": "A048919"
+    },
+    {
+      "key": "worklistId",
+      "value": ""
+    },
+    {
+      "key": "studyDate",
+      "value": "today"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth (sesi login)",
+      "description": "Dipakai bila ingin menguji dengan sesi (cookie), bukan API key.",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/login",
+            "description": "Login admin. Default admin/admin. Cookie PHPSESSID disimpan otomatis oleh Postman."
+          }
+        },
+        {
+          "name": "Me (status sesi)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/me",
+            "description": "Menampilkan status autentikasi: session / api-key / none."
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/logout",
+            "description": "Hapus sesi."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/health",
+            "description": "Status Orthanc: versi, AET, port, jumlah study/pasien/instance."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Worklist",
+      "item": [
+        {
+          "name": "List worklist",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/worklists",
+            "description": "Daftar order yang menunggu ditarik alat."
+          }
+        },
+        {
+          "name": "Create worklist",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"patient_name\": \"{{patientName}}\",\n  \"title\": \"{{patientTitle}}\",\n  \"patient_id\": \"{{patientId}}\",\n  \"accession_number\": \"{{accession}}\",\n  \"procedure\": \"THORAX PA\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/worklists",
+            "description": "Kirim order ke worklist. Nama otomatis dirapikan tanpa koma. Tanggal order = hari ini."
+          }
+        },
+        {
+          "name": "Get worklist by id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/worklists/{{worklistId}}",
+            "description": "Detail satu order. Isi variable `worklistId` dari hasil Create/List."
+          }
+        },
+        {
+          "name": "Update worklist",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"patient_name\": \"{{patientName}}\",\n  \"title\": \"{{patientTitle}}\",\n  \"patient_id\": \"{{patientId}}\",\n  \"accession_number\": \"{{accession}}\",\n  \"procedure\": \"THORAX PA LATERAL\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/worklists/{{worklistId}}",
+            "description": "Ubah order (pakai Tags yang lengkap)."
+          }
+        },
+        {
+          "name": "Delete worklist",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/worklists/{{worklistId}}",
+            "description": "Hapus order dari worklist."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Studies & Gambar",
+      "item": [
+        {
+          "name": "Recent (hari ini)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/studies/recent?date=today&limit=12",
+            "description": "Study hari ini (default dashboard). Ganti `date=all` atau `date=YYYYMMDD`."
+          }
+        },
+        {
+          "name": "Recent (semua tanggal)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/studies/recent?date=all&limit=12",
+            "description": "Study terbaru tanpa filter tanggal."
+          }
+        },
+        {
+          "name": "Cari by Accession",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/studies?accession={{accession}}",
+            "description": "Cari study berdasarkan Accession Number."
+          }
+        },
+        {
+          "name": "Cari by No. RM",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/studies?patient_id={{patientId}}",
+            "description": "Cari study berdasarkan PatientID (No. RM)."
+          }
+        },
+        {
+          "name": "Gambar JPEG",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/studies/{{accession}}/jpg?quality=90",
+            "description": "Render JPEG (fallback PNG bila SOPInstanceUID ambigu). Klik Send and Download."
+          }
+        },
+        {
+          "name": "Gambar PNG (resize)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/studies/{{accession}}/png?width=800",
+            "description": "Render PNG dengan lebar tertentu (endpoint native Orthanc)."
+          }
+        },
+        {
+          "name": "ZIP study (DICOM)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/studies/{{accession}}/zip",
+            "description": "Unduh seluruh study sebagai ZIP berisi file DICOM asli."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Settings",
+      "item": [
+        {
+          "name": "Get settings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/settings",
+            "description": "Pengaturan aktif + nilai efektif (base_url, AET, port). API key boleh."
+          }
+        },
+        {
+          "name": "Update settings (butuh sesi)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"server_ip\": \"10.4.0.10\",\n  \"http_port\": 8042,\n  \"dicom_port\": 4242,\n  \"timeout\": 30,\n  \"called_aet\": \"ORTHANC\",\n  \"calling_aet\": \"LEAD_CLIENT\",\n  \"modality\": \"DX\",\n  \"client_ip\": \"192.168.200.230\",\n  \"study_filter\": \"today\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/settings",
+            "description": "Hanya bisa dengan SESI LOGIN. Dengan API key akan 403."
+          }
+        },
+        {
+          "name": "Ganti password admin (butuh sesi)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"current_password\": \"admin\",\n  \"new_password\": \"admin123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/settings/password",
+            "description": "Hanya bisa dengan SESI LOGIN."
+          }
+        }
+      ]
+    }
+  ]
+}

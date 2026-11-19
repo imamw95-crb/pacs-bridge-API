@@ -1,0 +1,17 @@
+# ---- Kredensial & data runtime (JANGAN pernah di-commit) ----
+# settings.json memuat hash password admin + API key aktif
+data/*
+!data/.gitkeep
+# env REST Client (VS Code) memuat API key server dev & produksi
+http-client.env.json
+.env
+.env.*
+sessions/
+*.tar.gz
+
+# ---- Log / berkas sementara ----
+*.log
+data/*.lock
+*.tmp
+Thumbs.db
+desktop.ini

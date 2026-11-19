@@ -1,0 +1,6 @@
+* text=auto
+
+# Wajib LF: skrip deploy & build di server Linux
+Dockerfile text eol=lf
+*.sh text eol=lf
+deploy/cron-pacs-pull text eol=lf
