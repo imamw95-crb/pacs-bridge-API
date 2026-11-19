@@ -34,6 +34,9 @@ class Pacs extends BaseConfig
     public ?string $user     = null;
     public ?string $password = null;
 
-    /** Bila diisi, endpoint bridge mewajibkan header X-API-Key. */
+    /**
+     * API key **Bridge API** (dipakai `Simrs\Pacs\BridgeApiClient`), bukan library ini.
+     * Library `App\Libraries\Pacs` memanggil REST Orthanc langsung sehingga tidak memakai key.
+     */
     public string $apiKey = '';
 }

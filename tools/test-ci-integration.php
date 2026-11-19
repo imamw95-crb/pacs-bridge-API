@@ -57,7 +57,7 @@ check('CI4 library: konstruksi + health', static function () use ($ci4Config): s
     );
 });
 
-check('CI4 library: createOrder + deleteOrder', static function () use ($ci4Config): string {
+check('CI4 library: createOrder + updateOrder + deleteOrder', static function () use ($ci4Config): string {
     $pacs = new App\Libraries\Pacs($ci4Config);
     $created = $pacs->createOrder([
         'patient_name'     => 'CI TEST',
@@ -66,9 +66,21 @@ check('CI4 library: createOrder + deleteOrder', static function () use ($ci4Conf
         'accession_number' => 'ACC-CI-' . date('His'),
         'procedure'        => 'CI TEST THORAX',
     ]);
+
+    $updated = $pacs->updateOrder($created['id'], [
+        'patient_name'     => 'CI TEST',
+        'title'            => 'Ny.',
+        'patient_id'       => 'CI-TEST-01',
+        'accession_number' => $created['accession_number'],
+        'procedure'        => 'CI TEST THORAX ULANG',
+    ]);
+    if ($updated['id'] !== $created['id']) {
+        throw new RuntimeException('updateOrder mengembalikan id berbeda');
+    }
+
     $pacs->deleteOrder($created['id']);
 
-    return 'id=' . $created['id'] . ' nama="' . $created['patient_name'] . '" (dihapus)';
+    return 'id=' . $created['id'] . ' nama="' . $created['patient_name'] . '" (create+update+delete)';
 });
 
 check('CI4 library: pngByAccession', static function () use ($ci4Config): string {
@@ -136,6 +148,21 @@ check('CI3 library: create_order + delete_order', static function (): string {
     }
 
     return 'id=' . $created['id'] . ' (dibuat & dihapus)';
+});
+
+check('CI3 library: orders + find_studies', static function (): string {
+    $lib = new Pacs_bridge([
+        'pacs_root'   => dirname(__DIR__),
+        'server_ip'   => '10.4.0.10',
+        'http_port'   => 8042,
+    ]);
+    $orders = $lib->orders();
+    $studies = $lib->find_studies('A261105038');
+    if ($lib->error_message() !== '') {
+        throw new RuntimeException($lib->error_message());
+    }
+
+    return count($orders) . ' order, ' . count($studies) . ' study';
 });
 
 echo "\n=== Ringkasan: {$pass} pass, {$fail} fail ===\n";

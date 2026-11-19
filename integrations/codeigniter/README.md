@@ -76,6 +76,10 @@ pacs.modality   = DX
 # pacs.password = ******
 ```
 
+> `apiKey` di config hanya dipakai **Bridge API** (`Simrs\Pacs\BridgeApiClient`).
+> Library `App\Libraries\Pacs` / `Pacs_bridge` memanggil REST Orthanc langsung, jadi **tidak**
+> memakai API key — pengamanannya di level jaringan.
+
 ### 6. Pemakaian
 
 ```php

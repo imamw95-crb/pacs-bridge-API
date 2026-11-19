@@ -614,7 +614,7 @@ Bridge::fromArray([
 ### Verifikasi
 
 ```powershell
-php tools/test-ci-integration.php     # 5 pass, 0 fail (CI3 + CI4)
+php tools/test-ci-integration.php     # 6 pass, 0 fail (CI3 + CI4)
 ```
 
 ---

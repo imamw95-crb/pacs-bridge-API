@@ -19,5 +19,6 @@ $config['timeout']     = 30;
 $config['user']        = null;
 $config['password']    = null;
 
-// Bila diisi, controller bridge mewajibkan header X-API-Key
+// API key Bridge API (untuk Simrs\Pacs\BridgeApiClient).
+// Library Pacs_bridge memanggil REST Orthanc langsung, jadi tidak memakai key ini.
 $config['api_key']     = '';

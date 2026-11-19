@@ -13,12 +13,12 @@ use Throwable;
  * Contoh controller endpoint PACS untuk SIMRS (CodeIgniter 4).
  *
  * Routes (app/Config/Routes.php):
- *   $routes->get('pacs/health', 'Pacs::health');
- *   $routes->get('pacs/worklists', 'Pacs::worklists');
- *   $routes->post('pacs/worklists', 'Pacs::createWorklist');
- *   $routes->delete('pacs/worklists/(:segment)', 'Pacs::deleteWorklist/$1');
- *   $routes->get('pacs/studies/(:segment)/jpg', 'Pacs::jpg/$1');
- *   $routes->get('pacs/studies/(:segment)/png', 'Pacs::png/$1');
+ *   $routes->get('pacs/health', 'PacsController::health');
+ *   $routes->get('pacs/worklists', 'PacsController::worklists');
+ *   $routes->post('pacs/worklists', 'PacsController::createWorklist');
+ *   $routes->delete('pacs/worklists/(:segment)', 'PacsController::deleteWorklist/$1');
+ *   $routes->get('pacs/studies/(:segment)/jpg', 'PacsController::jpg/$1');
+ *   $routes->get('pacs/studies/(:segment)/png', 'PacsController::png/$1');
  */
 class PacsController extends Controller
 {
