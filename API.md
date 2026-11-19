@@ -243,9 +243,14 @@ Respons `200` (contoh nyata dari server produksi):
         "reachable": true,
         "count": 3,
         "error": null
-    }
+    },
+    "bridge_version": "1.2.0",
+    "server_time": "2026-11-19T11:55:29+07:00"
 }
 ```
+
+`bridge_version` = versi kode bridge yang sedang berjalan — pakai field ini untuk memastikan
+hasil deploy sudah aktif (dashboard juga memuat `<meta name="bridge-version">`).
 
 Field `worklist` = status **service Modality Worklist** (plugin `orthanc-worklists`), terpisah dari
 status Orthanc: Orthanc bisa hidup tapi plugin worklist mati → `worklist.reachable = false`

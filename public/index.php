@@ -408,7 +408,10 @@ try {
     }
 
     if ($path === '/health') {
-        respondJson($bridge->health());
+        $health = $bridge->health();
+        $health['bridge_version'] = \Simrs\Pacs\Version::VERSION;
+        $health['server_time'] = date('c');
+        respondJson($health);
     }
 
     if ($path === '/accession' && $method === 'GET') {

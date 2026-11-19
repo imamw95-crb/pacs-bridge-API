@@ -37,11 +37,27 @@ sleep 4
 sudo docker ps --filter name=pacs-bridge --format '{{.Names}} | {{.Status}} | {{.Ports}}'
 curl -s -o /dev/null -w "cek /dashboard (port 80) -> HTTP %{http_code}\n" http://127.0.0.1/dashboard
 
+echo "== verifikasi versi & API baru =="
+VER=$(curl -s http://127.0.0.1/health | sed -n 's/.*"bridge_version":"\([^"]*\)".*/\1/p')
+echo "bridge_version: ${VER:-tidak terdeteksi}"
+if curl -s http://127.0.0.1/audit | grep -q '"code":"UNAUTHORIZED"'; then
+    echo "API baru aktif (error code + audit)"
+else
+    echo "PERINGATAN: kode LAMA masih berjalan — image belum terbuild ulang / container belum dibuat ulang"
+fi
+
 echo "== pasang cron tarikan study (tiap menit) =="
 sudo install -m 644 "$APP/deploy/cron-pacs-pull" /etc/cron.d/pacs-pull
 sudo touch /var/log/pacs-pull.log
 sudo chmod 644 /var/log/pacs-pull.log
 echo "terpasang: /etc/cron.d/pacs-pull (log: /var/log/pacs-pull.log)"
+
+if [ -f "$APP/deploy/cron-pacs-notify" ]; then
+    sudo install -m 644 "$APP/deploy/cron-pacs-notify" /etc/cron.d/pacs-notify
+    sudo touch /var/log/pacs-notify.log
+    sudo chmod 644 /var/log/pacs-notify.log
+    echo "terpasang: /etc/cron.d/pacs-notify (aktif bila callback_url diisi)"
+fi
 
 # cron lama 30 menit harus dimatikan manual supaya tidak menarik dobel
 OLD_SYSTEM=$(sudo grep -Hin "santesrv\|pull-santesrv" /etc/crontab /etc/cron.d/* 2>/dev/null \

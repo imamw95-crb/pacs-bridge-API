@@ -69,12 +69,18 @@ $url = trim((string) ($envUrl !== false && $envUrl !== '' ? $envUrl : ($settings
 $key = (string) ($envKey !== false && $envKey !== '' ? $envKey : ($settings['callback_key'] ?? ''));
 
 if ($url === '') {
-    $err('callback_url belum diisi (dashboard → Pengaturan → panel API Bridge / Callback).');
-    exit(2);
+    if (!$quiet) {
+        $err('callback_url belum diisi (dashboard → Pengaturan → panel API Bridge / Callback).');
+        exit(2);
+    }
+    exit(0); // mode cron: callback belum dipakai, jangan spam log
 }
 if ($key === '' && !$dryRun) {
-    $err('callback_key belum diisi — callback tanpa tanda tangan HMAC tidak diizinkan.');
-    exit(2);
+    if (!$quiet) {
+        $err('callback_key belum diisi — callback tanpa tanda tangan HMAC tidak diizinkan.');
+        exit(2);
+    }
+    exit(0);
 }
 
 if (!is_dir($dataDir)) {

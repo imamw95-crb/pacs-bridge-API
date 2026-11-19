@@ -717,10 +717,17 @@ bash /opt/pacs-bridge/deploy/deploy.sh /tmp/pacs-bridge-deploy.tar.gz
 ```
 
 `deploy.sh` otomatis: backup aplikasi lama ke `/opt/pacs-bridge-backup-<ts>.tar.gz`,
-build image, recreate container, cek `/dashboard`, lalu memasang
-**`/etc/cron.d/pacs-pull`** (tarikan study tiap menit dari `SANTESRV1`, log di
-`/var/log/pacs-pull.log`). Script akan memperingatkan bila cron lama (30 menit) masih ada —
-hapus manual agar tidak menarik dobel.
+build image, recreate container, cek `/dashboard`, memasang **`/etc/cron.d/pacs-pull`**
+(tarikan study tiap menit dari `SANTESRV1`) dan **`/etc/cron.d/pacs-notify`** (callback),
+lalu mencetak `bridge_version` + cek bahwa API baru (`/audit` → `401 "code":"UNAUTHORIZED"`)
+sudah aktif.
+
+> **Kode di-bake ke image** (`COPY . /var/www/html`). Mengekstrak tar ke `/opt/pacs-bridge`
+> tanpa `docker build` + recreate container **tidak** mengubah versi yang berjalan.
+> Verifikasi: `curl -s http://127.0.0.1/health | grep bridge_version` (harus `1.2.0`).
+
+Script juga memperingatkan bila cron lama (30 menit, `orthanc-sync.sh`) masih ada — hapus manual
+agar tidak menarik dobel.
 
 ### Catatan deploy
 

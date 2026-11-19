@@ -59,6 +59,12 @@ Pasang `deploy/cron-pacs-notify` ke `/etc/cron.d/pacs-notify` (tiap menit) dan i
 
 ## Catatan
 
+- **Verifikasi deploy:** `curl -s http://127.0.0.1/health | grep bridge_version` harus menampilkan
+  versi terbaru (`1.2.0`), dan `curl -s http://127.0.0.1/audit` harus `401` dengan `"code":"UNAUTHORIZED"`.
+  `deploy.sh` mencetak hasil kedua cek ini otomatis.
+- Kode di-bake ke image (`COPY . /var/www/html`) — mengekstrak tar ke `/opt/pacs-bridge` **tanpa**
+  `docker build` + `docker rm -f`/`docker run` (yaitu tanpa `deploy.sh`) **tidak** mengubah yang berjalan.
+
 - `data/settings.json` tidak ikut paket, jadi konfigurasi di server aman saat update.
 - File `.sh` dan `Dockerfile` harus berakhiran **LF** (bukan CRLF).
 - `deploy/nginx-pacs-bridge.conf` hanya dipakai bila host memakai nginx; server 10.4.0.10 memakai lighttpd.
