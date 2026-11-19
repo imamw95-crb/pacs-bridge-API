@@ -1,7 +1,8 @@
 # Bridge SIMRS ↔ Orthanc PACS
 
 Bridge PHP tanpa framework untuk menghubungkan **SIMRS** dengan server **Orthanc PACS**
-(Modality Worklist DICOM + retrieval study/gambar). Dipakai untuk modalitas **DX**, **US**, dan **ECG**.
+(Modality Worklist DICOM + retrieval study/gambar). Mendukung semua kode modality DICOM
+(**DX**, **CT**, **US**, **ECG**, **PX**, …) — nilai bawaan `DX`, bisa diubah per order.
 
 Alur lengkap (diagram Mermaid, otomatis dirender GitHub): lihat [Alur program](#alur-program).
 

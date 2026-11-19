@@ -12,6 +12,8 @@ $config['http_port']   = 8042;
 $config['dicom_port']  = 4242;
 $config['called_aet']  = 'ORTHANC';
 $config['calling_aet'] = 'LEAD_CLIENT';
+// Modality DEFAULT bila order tidak mengisi 'modality'.
+// Bukan pembatasan: order boleh pakai DX, CT, US, ECG, PX, ... (alat harus terdaftar di Orthanc)
 $config['modality']    = 'DX';
 $config['timeout']     = 30;
 

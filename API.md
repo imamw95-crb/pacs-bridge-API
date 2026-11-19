@@ -275,6 +275,11 @@ Field **opsional**: `title`, `modality`, `station_aet`, `start_date` (`YYYYMMDD`
 `start_time` (`HHMMSS`), `sps_id`, `study_instance_uid`, `birth_date`, `sex`,
 `requested_procedure_id`.
 
+> `modality` (tag `0008,0060` pada ScheduledProcedureStep) **tidak dibatasi DX**.
+> Bila tidak dikirim, dipakai nilai default dari Pengaturan (`PACS_MODALITY`, bawaan `DX`).
+> Order CT/USG/EKG cukup mengisi `modality` + `station_aet` sesuai alat — alatnya tetap harus
+> terdaftar di `DicomModalities` Orthanc dan di daftar **Alat Worklist** dashboard.
+
 ```json
 {
   "patient_name": "BUDI SANTOSO",

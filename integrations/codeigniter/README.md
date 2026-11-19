@@ -230,6 +230,10 @@ server bridge; di mode B, server SIMRS. Bila tidak tersedia, panggil dengan `$wa
 
 ## E. Catatan penting
 
+- **`modality` hanya default.** Nilai di config (`pacs.modality` / `$config['modality']`) dipakai
+  bila order tidak mengisi `modality`. Order lain (CT, US, ECG, PX, …) cukup mengirim
+  `'modality' => 'CT'` + `'station_aet' => '<AET alat>'` — tidak perlu mengubah config.
+  Alatnya tetap harus terdaftar di `DicomModalities` Orthanc dan di daftar **Alat Worklist** dashboard.
 - **PatientName tanpa koma** (`TARYA BIN WARDI TN`) — mode B: `PatientName::safe()`; mode A: bridge yang merapikan.
 - Order harus **tanggal hari ini**; kalau tidak, alat tidak melihatnya (mode A: bridge menangani).
 - **AE Title case-sensitive** — kirim huruf asli (`VersanaB-000000`).

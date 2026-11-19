@@ -97,6 +97,9 @@ PACS_HTTP_USER, PACS_HTTP_PASS, PACS_BRIDGE_KEY, PACS_TIMEOUT, PACS_TIMEZONE (de
   Zona waktu PHP di-set di `src/autoload.php` (`PACS_TIMEZONE`, default `Asia/Jakarta`) supaya tanggal/jam
   worklist & nomor accession tidak memakai UTC.
 - Isi `ScheduledStationAETitle` = AET alat (`LEAD_CLIENT`, `VersanaB-000000`, …).
+- `modality` (`0008,0060` pada ScheduledProcedureStep) **tidak dibatasi DX**: `MODALITY` di
+  `setting.txt`/config hanya **default**; kirim `modality` per order (DX/CT/US/ECG/PX) + `station_aet`
+  alat. Alat baru tetap harus didaftarkan di Orthanc (`DicomModalities`) **dan** di `worklist_devices`.
 - Sertakan **`ScheduledProcedureStepStatus = SCHEDULED`** (`0040,0020`). Alat Siemens
   (syngo CT View&GO, AET `CT140643`) memfilter MWL dengan status ini; tanpa tag tersebut
   order **tidak muncul** di "Scan Worklist" walau C-FIND dari server tetap mengembalikan hasil

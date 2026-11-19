@@ -27,6 +27,12 @@ class Pacs extends BaseConfig
     public int $dicomPort    = 4242;
     public string $calledAet = 'ORTHANC';
     public string $callingAet = 'LEAD_CLIENT';
+
+    /**
+     * Modality **default** bila sebuah order tidak mengisi `modality`.
+     * Bukan pembatasan: order boleh memakai `modality` lain (DX, CT, US, ECG, PX, …)
+     * asalkan alatnya terdaftar di Orthanc (`DicomModalities`).
+     */
     public string $modality  = 'DX';
     public int $timeout      = 30;
 

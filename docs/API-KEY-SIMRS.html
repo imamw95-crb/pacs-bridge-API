@@ -363,6 +363,9 @@ open("hasil.jpg", "wb").write(img.content)</code></pre>
   <p><b>Catatan operasional penting</b></p>
   <ul class="small">
     <li><code>ScheduledProcedureStepStartDate</code> harus <b>hari ini</b> (<code>Ymd</code>), kalau tidak order tidak terlihat alat.</li>
+    <li><code>modality</code> <b>tidak dibatasi DX</b>: nilai config/<code>PACS_MODALITY</code> hanya default.
+        Kirim <code>"modality":"CT"</code> / <code>"US"</code> / <code>"ECG"</code> + <code>station_aet</code> alat
+        untuk order modalitas lain (alat tetap harus terdaftar di Orthanc).</li>
     <li>AE Title alat <b>case-sensitive</b>; kirim huruf asli (<code>VersanaB-000000</code>, bukan <code>VERSANAB-000000</code>).</li>
     <li>PatientName diformat tanpa koma; gunakan helper/<code>PatientName::safe()</code> bila mengirim lewat SDK.</li>
     <li>Sebagian alat (mis. USG) mengirim study <b>tanpa AccessionNumber</b>. Untuk study seperti itu, pakai
