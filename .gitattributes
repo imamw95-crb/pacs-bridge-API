@@ -4,3 +4,4 @@
 Dockerfile text eol=lf
 *.sh text eol=lf
 deploy/cron-pacs-pull text eol=lf
+deploy/cron-pacs-notify text eol=lf
