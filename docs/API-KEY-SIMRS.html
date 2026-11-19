@@ -139,9 +139,9 @@ baris baru, atau tanda kutip.</p>
 <table>
   <thead><tr><th style="width:34%">Cara</th><th>Contoh</th><th style="width:16%">Diterima?</th></tr></thead>
   <tbody>
-    <tr><td>Header HTTP</td><td class="mono">X-API-Key: 9037c7e9…eb45</td><td class="c tag-ok">Ya</td></tr>
-    <tr><td>Query string</td><td class="mono">/health?api_key=9037c7e9…</td><td class="c tag-no">Tidak → 401</td></tr>
-    <tr><td>Body JSON</td><td class="mono">{"api_key": "9037c7e9…"}</td><td class="c tag-no">Tidak → 401</td></tr>
+    <tr><td>Header HTTP</td><td class="mono">X-API-Key: 0123abcd…beef</td><td class="c tag-ok">Ya</td></tr>
+    <tr><td>Query string</td><td class="mono">/health?api_key=0123abcd…</td><td class="c tag-no">Tidak → 401</td></tr>
+    <tr><td>Body JSON</td><td class="mono">{"api_key": "0123abcd…"}</td><td class="c tag-no">Tidak → 401</td></tr>
     <tr><td>Cookie</td><td class="mono">api_key=…</td><td class="c tag-no">Tidak → 401</td></tr>
     <tr><td>Basic/Bearer auth</td><td class="mono">Authorization: Bearer …</td><td class="c tag-no">Tidak → 401</td></tr>
   </tbody>
