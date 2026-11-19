@@ -183,6 +183,10 @@ $image = $this->pacs_bridge->jpeg_by_accession('A261105038', 90);
 Nama method beda hanya karena konvensi: CI4 = camelCase, CI3 = snake_case.
 CI4 melempar `Throwable`; CI3 mengembalikan `false` / `[]` / `null` + `error_message()`.
 
+Watermark membutuhkan ekstensi **GD + FreeType** di server yang menjalankan library.
+Bila tidak tersedia, panggil dengan `$watermark = false` (atau `watermark=0` pada endpoint)
+agar gambar dikirim apa adanya.
+
 ---
 
 ## D. Dua cara menghubungkan SIMRS ke PACS
