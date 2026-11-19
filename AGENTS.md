@@ -585,6 +585,11 @@ SIMRS berbasis CodeIgniter. Dua varian disiapkan tanpa mengubah SDK inti:
 | CI4 | `App\Libraries\Pacs` (`integrations/codeigniter/ci4/app/Libraries/Pacs.php`) | `createOrder()`, `findStudies()`, `jpegByAccession()` |
 | CI3 | `Pacs_bridge` (`integrations/codeigniter/ci3/application/libraries/Pacs_bridge.php`) | `create_order()`, `find_studies()`, `jpeg_by_accession()` |
 
+Keduanya juga membungkus fitur API terbaru: `nextAccession()`, `recentStudies()`,
+`findStudiesByPatientId()/ByName()`, `imageList()`, `zipJpgByAccession()` (folder = No. RM),
+dan `zipByAccession()`. Semua wrapper hanya memanggil service di `src/` (tidak ada logika HTTP
+baru di adapter), sehingga perilakunya sama dengan REST API.
+
 ### Aturan saat menyentuh kode integrasi
 
 1. **Jangan duplikasi logika HTTP** — semua tetap lewat `src/OrthancClient.php` dan service di `src/`.
@@ -614,7 +619,7 @@ Bridge::fromArray([
 ### Verifikasi
 
 ```powershell
-php tools/test-ci-integration.php     # 6 pass, 0 fail (CI3 + CI4)
+php tools/test-ci-integration.php     # 9 pass, 0 fail (CI3 + CI4)
 ```
 
 ---

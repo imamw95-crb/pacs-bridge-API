@@ -97,6 +97,32 @@ check('CI4 library: pngByAccession', static function () use ($ci4Config): string
     return strlen($png['content']) . ' byte PNG';
 });
 
+check('CI4 library: nextAccession + recentStudies', static function () use ($ci4Config): string {
+    $pacs = new App\Libraries\Pacs($ci4Config);
+    $accession = $pacs->nextAccession();
+    if (preg_match('/^\d{8,16}$/', $accession) !== 1) {
+        throw new RuntimeException('format accession tidak valid: ' . $accession);
+    }
+    $recent = $pacs->recentStudies('today', 3);
+    $byName = $pacs->findStudiesByName('TES', 5);
+
+    return 'acc=' . $accession . ', ' . count($recent) . ' study hari ini, ' . count($byName) . ' by nama';
+});
+
+check('CI4 library: zipJpgByAccession + zipByAccession', static function () use ($ci4Config): string {
+    $pacs = new App\Libraries\Pacs($ci4Config);
+    $jpgZip = $pacs->zipJpgByAccession('A261105038', 80, false);
+    if ($jpgZip === null || !str_starts_with($jpgZip['content'], "PK")) {
+        throw new RuntimeException('ZIP JPG tidak valid');
+    }
+    $dicomZip = $pacs->zipByAccession('A261105038');
+    if ($dicomZip === null || !str_starts_with($dicomZip, "PK")) {
+        throw new RuntimeException('ZIP DICOM tidak valid');
+    }
+
+    return $jpgZip['filename'] . ' (' . strlen($jpgZip['content']) . 'B), DICOM ' . strlen($dicomZip) . 'B';
+});
+
 // ---------- CI3 style: Pacs_bridge ----------
 if (!function_exists('log_message')) {
     function log_message(string $level, string $message): void
@@ -163,6 +189,29 @@ check('CI3 library: orders + find_studies', static function (): string {
     }
 
     return count($orders) . ' order, ' . count($studies) . ' study';
+});
+
+check('CI3 library: next_accession + recent_studies + zip_jpg', static function (): string {
+    $lib = new Pacs_bridge([
+        'pacs_root'   => dirname(__DIR__),
+        'server_ip'   => '10.4.0.10',
+        'http_port'   => 8042,
+    ]);
+    $accession = $lib->next_accession();
+    if ($accession === false || preg_match('/^\d{8,16}$/', $accession) !== 1) {
+        throw new RuntimeException('next_accession gagal: ' . $lib->error_message());
+    }
+
+    $recent = $lib->recent_studies('today', 3);
+    $zip = $lib->zip_jpg_by_accession('A261105038', 80, false);
+    if ($lib->error_message() !== '') {
+        throw new RuntimeException($lib->error_message());
+    }
+    if ($zip === null || !str_starts_with($zip['content'], 'PK')) {
+        throw new RuntimeException('ZIP JPG tidak valid');
+    }
+
+    return 'acc=' . $accession . ', ' . count($recent) . ' study, zip ' . strlen($zip['content']) . 'B';
 });
 
 echo "\n=== Ringkasan: {$pass} pass, {$fail} fail ===\n";

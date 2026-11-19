@@ -108,6 +108,66 @@ class Pacs
     }
 
     /**
+     * Nomor AccessionNumber baru mengikuti format alat Orthanc.
+     */
+    public function nextAccession(): string
+    {
+        return $this->bridge->worklist()->nextAccessionNumber();
+    }
+
+    /**
+     * Study terbaru (urut tanggal + jam study menurun).
+     *
+     * @param string $date 'today' (default), 'all', atau 'YYYYMMDD'
+     * @param string $modality kode DICOM (mis. 'DX', 'US', 'ECG'); kosong = semua
+     * @return list<array<string, mixed>>
+     */
+    public function recentStudies(string $date = 'today', int $limit = 12, string $modality = ''): array
+    {
+        $limit = max(1, min(300, $limit));
+        $filter = $this->normalizeDate($date);
+        $modality = strtoupper(trim($modality));
+
+        $studies = $this->bridge->studies();
+        $fetchLimit = $modality === '' ? $limit : 300;
+        $rows = $studies->attachModalities($studies->recent($fetchLimit, $filter), $filter);
+
+        if ($modality !== '') {
+            $rows = $studies->filterByModality($rows, $modality);
+        }
+
+        return array_slice($rows, 0, $limit);
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function findStudiesByPatientId(string $patientId, int $limit = 20): array
+    {
+        return $this->bridge->studies()->findByPatientId($patientId, $limit);
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function findStudiesByName(string $name, int $limit = 50): array
+    {
+        return $this->bridge->studies()->findByPatientName($name, $limit);
+    }
+
+    /**
+     * Daftar gambar (instance) satu study; kunci boleh accession, ID Orthanc, atau DICOM UID.
+     *
+     * @return list<array{instance_id: string, series_number: string, instance_number: string}>
+     */
+    public function imageList(string $studyKey): array
+    {
+        $study = $this->bridge->studies()->findOneByKey($studyKey);
+
+        return $study === null ? [] : $this->bridge->studies()->imageList((string) ($study['ID'] ?? ''));
+    }
+
+    /**
      * @return list<array<string, mixed>>
      */
     public function findStudies(string $accessionNumber): array
@@ -118,9 +178,9 @@ class Pacs
     /**
      * @return array{content: string, mime: string, filename: string, study_id: string}|null
      */
-    public function jpegByAccession(string $accessionNumber, int $quality = 90): ?array
+    public function jpegByAccession(string $accessionNumber, int $quality = 90, bool $watermark = false): ?array
     {
-        return $this->bridge->studies()->imageByAccession($accessionNumber, 'jpg', $quality);
+        return $this->bridge->studies()->imageByAccession($accessionNumber, 'jpg', $quality, null, $watermark);
     }
 
     /**
@@ -129,6 +189,46 @@ class Pacs
     public function pngByAccession(string $accessionNumber, ?int $width = null): ?array
     {
         return $this->bridge->studies()->imageByAccession($accessionNumber, 'png', 90, $width);
+    }
+
+    /**
+     * ZIP berisi semua JPG satu study, satu folder = No. RM.
+     *
+     * @return array{content: string, filename: string, folder: string}|null null bila study tidak punya gambar
+     */
+    public function zipJpgByAccession(string $accessionNumber, int $quality = 90, bool $watermark = true): ?array
+    {
+        return $this->bridge->studies()->zipJpegByKey($accessionNumber, $quality, $watermark);
+    }
+
+    /**
+     * ZIP seluruh DICOM satu study.
+     */
+    public function zipByAccession(string $accessionNumber): ?string
+    {
+        $study = $this->bridge->studies()->findOneByKey($accessionNumber);
+
+        return $study === null ? null : $this->bridge->studies()->archiveStudy((string) ($study['ID'] ?? ''));
+    }
+
+    /**
+     * @param string $date 'today', 'all', atau 'YYYYMMDD'
+     */
+    private function normalizeDate(string $date): ?string
+    {
+        $date = strtolower(trim($date));
+
+        if ($date === '' || $date === 'today') {
+            return date('Ymd');
+        }
+        if ($date === 'all') {
+            return null;
+        }
+        if (preg_match('/^\d{8}$/', $date) !== 1) {
+            throw new \InvalidArgumentException('Parameter tanggal harus today, all, atau YYYYMMDD');
+        }
+
+        return $date;
     }
 
     /**

@@ -14,11 +14,15 @@ use Throwable;
  *
  * Routes (app/Config/Routes.php):
  *   $routes->get('pacs/health', 'PacsController::health');
+ *   $routes->get('pacs/accession', 'PacsController::accession');
  *   $routes->get('pacs/worklists', 'PacsController::worklists');
  *   $routes->post('pacs/worklists', 'PacsController::createWorklist');
  *   $routes->delete('pacs/worklists/(:segment)', 'PacsController::deleteWorklist/$1');
+ *   $routes->get('pacs/studies/recent', 'PacsController::recent');
  *   $routes->get('pacs/studies/(:segment)/jpg', 'PacsController::jpg/$1');
  *   $routes->get('pacs/studies/(:segment)/png', 'PacsController::png/$1');
+ *   $routes->get('pacs/studies/(:segment)/zip-jpg', 'PacsController::zipJpg/$1');
+ *   $routes->get('pacs/studies/(:segment)/zip', 'PacsController::zip/$1');
  */
 class PacsController extends Controller
 {
@@ -44,6 +48,32 @@ class PacsController extends Controller
     public function worklists(): ResponseInterface
     {
         return $this->response->setJSON($this->pacs->orders());
+    }
+
+    public function accession(): ResponseInterface
+    {
+        return $this->response->setJSON(['accession_number' => $this->pacs->nextAccession()]);
+    }
+
+    public function recent(): ResponseInterface
+    {
+        $date = (string) ($this->request->getGet('date') ?? 'today');
+        $limit = (int) ($this->request->getGet('limit') ?? 12);
+        $modality = (string) ($this->request->getGet('modality') ?? '');
+
+        try {
+            $studies = $this->pacs->recentStudies($date, $limit, $modality);
+        } catch (Throwable $e) {
+            return $this->response->setStatusCode(400)->setJSON(['error' => $e->getMessage()]);
+        }
+
+        return $this->response->setJSON([
+            'date'     => $date,
+            'limit'    => $limit,
+            'modality' => $modality === '' ? 'all' : strtoupper($modality),
+            'count'    => count($studies),
+            'studies'  => $studies,
+        ]);
     }
 
     public function createWorklist(): ResponseInterface
@@ -101,5 +131,48 @@ class PacsController extends Controller
             ->setHeader('Content-Type', $image['mime'])
             ->setHeader('Content-Disposition', 'inline; filename="' . $image['filename'] . '"')
             ->setBody($image['content']);
+    }
+
+    public function zipJpg(string $accession): ResponseInterface
+    {
+        $quality = (int) ($this->request->getGet('quality') ?? 90);
+        $watermark = ! in_array(
+            strtolower((string) ($this->request->getGet('watermark') ?? '1')),
+            ['0', 'false', 'no', 'off'],
+            true
+        );
+
+        try {
+            $archive = $this->pacs->zipJpgByAccession($accession, $quality, $watermark);
+        } catch (Throwable $e) {
+            return $this->response->setStatusCode(404)->setJSON(['error' => $e->getMessage()]);
+        }
+
+        if ($archive === null) {
+            return $this->response->setStatusCode(404)->setJSON([
+                'error' => 'Tidak ada gambar untuk ' . $accession,
+            ]);
+        }
+
+        return $this->response
+            ->setHeader('Content-Type', 'application/zip')
+            ->setHeader('Content-Disposition', 'attachment; filename="' . $archive['filename'] . '"')
+            ->setBody($archive['content']);
+    }
+
+    public function zip(string $accession): ResponseInterface
+    {
+        $content = $this->pacs->zipByAccession($accession);
+
+        if ($content === null) {
+            return $this->response->setStatusCode(404)->setJSON([
+                'error' => 'Study tidak ditemukan untuk ' . $accession,
+            ]);
+        }
+
+        return $this->response
+            ->setHeader('Content-Type', 'application/zip')
+            ->setHeader('Content-Disposition', 'attachment; filename="' . $accession . '.zip"')
+            ->setBody($content);
     }
 }

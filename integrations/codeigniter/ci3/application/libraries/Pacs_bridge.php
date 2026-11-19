@@ -124,6 +124,76 @@ class Pacs_bridge
     }
 
     /**
+     * @return string|false
+     */
+    public function next_accession()
+    {
+        try {
+            return $this->bridge->worklist()->nextAccessionNumber();
+        } catch (\Throwable $e) {
+            $this->errorMessage = $e->getMessage();
+
+            return false;
+        }
+    }
+
+    /**
+     * @param string $date 'today' (default), 'all', atau 'YYYYMMDD'
+     * @param string $modality kode DICOM (mis. 'DX', 'US', 'ECG'); kosong = semua
+     * @return array<int, array<string, mixed>>
+     */
+    public function recent_studies(string $date = 'today', int $limit = 12, string $modality = ''): array
+    {
+        try {
+            $limit = max(1, min(300, $limit));
+            $filter = $this->normalize_date($date);
+            $modality = strtoupper(trim($modality));
+
+            $studies = $this->bridge->studies();
+            $fetchLimit = $modality === '' ? $limit : 300;
+            $rows = $studies->attachModalities($studies->recent($fetchLimit, $filter), $filter);
+
+            if ($modality !== '') {
+                $rows = $studies->filterByModality($rows, $modality);
+            }
+
+            return array_slice($rows, 0, $limit);
+        } catch (\Throwable $e) {
+            $this->errorMessage = $e->getMessage();
+
+            return [];
+        }
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public function find_studies_by_patient_id(string $patient_id, int $limit = 20): array
+    {
+        try {
+            return $this->bridge->studies()->findByPatientId($patient_id, $limit);
+        } catch (\Throwable $e) {
+            $this->errorMessage = $e->getMessage();
+
+            return [];
+        }
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public function find_studies_by_name(string $name, int $limit = 50): array
+    {
+        try {
+            return $this->bridge->studies()->findByPatientName($name, $limit);
+        } catch (\Throwable $e) {
+            $this->errorMessage = $e->getMessage();
+
+            return [];
+        }
+    }
+
+    /**
      * @return array<int, array<string, mixed>>
      */
     public function find_studies(string $accession_number): array
@@ -138,12 +208,30 @@ class Pacs_bridge
     }
 
     /**
-     * @return array<string, mixed>|null
+     * Daftar gambar (instance) satu study; kunci boleh accession, ID Orthanc, atau DICOM UID.
+     *
+     * @return array<int, array<string, mixed>>
      */
-    public function jpeg_by_accession(string $accession_number, int $quality = 90)
+    public function image_list(string $study_key): array
     {
         try {
-            return $this->bridge->studies()->imageByAccession($accession_number, 'jpg', $quality);
+            $study = $this->bridge->studies()->findOneByKey($study_key);
+
+            return $study === null ? [] : $this->bridge->studies()->imageList((string) ($study['ID'] ?? ''));
+        } catch (\Throwable $e) {
+            $this->errorMessage = $e->getMessage();
+
+            return [];
+        }
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    public function jpeg_by_accession(string $accession_number, int $quality = 90, bool $watermark = false)
+    {
+        try {
+            return $this->bridge->studies()->imageByAccession($accession_number, 'jpg', $quality, null, $watermark);
         } catch (\Throwable $e) {
             $this->errorMessage = $e->getMessage();
 
@@ -163,6 +251,58 @@ class Pacs_bridge
 
             return null;
         }
+    }
+
+    /**
+     * ZIP berisi semua JPG satu study, satu folder = No. RM.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function zip_jpg_by_accession(string $accession_number, int $quality = 90, bool $watermark = true)
+    {
+        try {
+            return $this->bridge->studies()->zipJpegByKey($accession_number, $quality, $watermark);
+        } catch (\Throwable $e) {
+            $this->errorMessage = $e->getMessage();
+
+            return null;
+        }
+    }
+
+    /**
+     * ZIP seluruh DICOM satu study.
+     */
+    public function zip_by_accession(string $accession_number): ?string
+    {
+        try {
+            $study = $this->bridge->studies()->findOneByKey($accession_number);
+
+            return $study === null ? null : $this->bridge->studies()->archiveStudy((string) ($study['ID'] ?? ''));
+        } catch (\Throwable $e) {
+            $this->errorMessage = $e->getMessage();
+
+            return null;
+        }
+    }
+
+    /**
+     * @param string $date 'today', 'all', atau 'YYYYMMDD'
+     */
+    private function normalize_date(string $date): ?string
+    {
+        $date = strtolower(trim($date));
+
+        if ($date === '' || $date === 'today') {
+            return date('Ymd');
+        }
+        if ($date === 'all') {
+            return null;
+        }
+        if (preg_match('/^\d{8}$/', $date) !== 1) {
+            throw new \InvalidArgumentException('Parameter tanggal harus today, all, atau YYYYMMDD');
+        }
+
+        return $date;
     }
 
     public function error_message(): string

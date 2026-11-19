@@ -56,11 +56,15 @@ public static function pacs(bool $getShared = true): \App\Libraries\Pacs
 
 ```php
 $routes->get('pacs/health', 'PacsController::health');
+$routes->get('pacs/accession', 'PacsController::accession');
 $routes->get('pacs/worklists', 'PacsController::worklists');
 $routes->post('pacs/worklists', 'PacsController::createWorklist');
 $routes->delete('pacs/worklists/(:segment)', 'PacsController::deleteWorklist/$1');
+$routes->get('pacs/studies/recent', 'PacsController::recent');          // sebelum (:segment)
 $routes->get('pacs/studies/(:segment)/jpg', 'PacsController::jpg/$1');
 $routes->get('pacs/studies/(:segment)/png', 'PacsController::png/$1');
+$routes->get('pacs/studies/(:segment)/zip-jpg', 'PacsController::zipJpg/$1');
+$routes->get('pacs/studies/(:segment)/zip', 'PacsController::zip/$1');
 ```
 
 ### 5. Konfigurasi (`.env`)
@@ -122,11 +126,15 @@ if ($image !== null) {
 
 ```php
 $route['pacs/health']                   = 'pacs/health';
+$route['pacs/accession']                = 'pacs/accession';
 $route['pacs/worklists']                = 'pacs/worklists';
 $route['pacs/worklists/create']         = 'pacs/create_worklist';
 $route['pacs/worklists/(:any)/delete']  = 'pacs/delete_worklist/$1';
+$route['pacs/studies/recent']           = 'pacs/recent';            // sebelum (:any)
 $route['pacs/studies/(:any)/jpg']       = 'pacs/jpg/$1';
 $route['pacs/studies/(:any)/png']       = 'pacs/png/$1';
+$route['pacs/studies/(:any)/zip-jpg']   = 'pacs/zip_jpg/$1';
+$route['pacs/studies/(:any)/zip']       = 'pacs/zip_dicom/$1';
 ```
 
 ### 4. Pemakaian di controller/model
@@ -160,12 +168,20 @@ $image = $this->pacs_bridge->jpeg_by_accession('A261105038', 90);
 | `updateOrder(id, array)` / `update_order(id, array)` | ubah order |
 | `deleteOrder(id)` / `delete_order(id)` | hapus order |
 | `orders()` | daftar order |
+| `nextAccession()` / `next_accession()` | nomor AccessionNumber baru (format alat Orthanc) |
 | `findStudies($accession)` / `find_studies()` | cari study |
-| `jpegByAccession($acc, $quality)` / `jpeg_by_accession()` | gambar JPEG |
+| `recentStudies($date = 'today', $limit = 12, $modality = '')` / `recent_studies(...)` | study terbaru (`today` / `all` / `YYYYMMDD`) + filter modalitas (`DX`, `US`, `ECG`, …) |
+| `findStudiesByPatientId($noRm, $limit = 20)` / `find_studies_by_patient_id()` | riwayat study pasien |
+| `findStudiesByName($nama, $limit = 50)` / `find_studies_by_name()` | cari study by nama (parsial) |
+| `imageList($kunci)` / `image_list()` | daftar instance/gambar satu study (kunci = accession / ID Orthanc / UID) |
+| `jpegByAccession($acc, $quality, $watermark = false)` / `jpeg_by_accession(...)` | gambar JPEG (opsional watermark; US/ECG otomatis tanpa watermark) |
 | `pngByAccession($acc, $width)` / `png_by_accession()` | gambar PNG (resize) |
+| `zipJpgByAccession($acc, $quality, $watermark = true)` / `zip_jpg_by_accession(...)` | ZIP semua JPG, satu folder = No. RM |
+| `zipByAccession($acc)` / `zip_by_accession()` | ZIP seluruh DICOM study |
 | `worklist()`, `studies()`, `client()` | akses service tingkat rendah |
 
 Nama method beda hanya karena konvensi: CI4 = camelCase, CI3 = snake_case.
+CI4 melempar `Throwable`; CI3 mengembalikan `false` / `[]` / `null` + `error_message()`.
 
 ---
 

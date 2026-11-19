@@ -718,6 +718,37 @@ final class StudyService
     }
 
     /**
+     * Arsip ZIP berisi semua gambar JPEG satu study (satu folder = No. RM),
+     * siap dikirim sebagai unduhan. Watermark identitas pasien aktif secara
+     * default; citra US & ECG tetap tanpa watermark.
+     *
+     * @return array{content: string, filename: string, folder: string}|null null bila study tidak punya gambar
+     * @throws InvalidArgumentException bila study tidak ditemukan
+     */
+    public function zipJpegByKey(string $key, int $quality = 90, bool $watermark = true): ?array
+    {
+        $archive = $this->imagesByKey($key, $quality, $watermark);
+        if ($archive['files'] === []) {
+            return null;
+        }
+
+        $folder = preg_replace('/[^A-Za-z0-9_.-]+/', '_', $archive['patient_id'] !== '' ? $archive['patient_id'] : $key);
+        $folder = trim((string) $folder, '_') ?: $key;
+
+        $zip = new ZipWriter();
+        $zip->addDirectory($folder);
+        foreach ($archive['files'] as $file) {
+            $zip->addFile($folder . '/' . $file['name'], $file['content']);
+        }
+
+        return [
+            'content'  => $zip->finish(),
+            'filename' => $folder . '.zip',
+            'folder'   => $folder,
+        ];
+    }
+
+    /**
      * @param array<string, mixed> $study
      * @return array{patient_id: string, patient_name: string, accession: string, files: list<array{name: string, content: string}>}
      */

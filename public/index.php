@@ -37,7 +37,6 @@ use Simrs\Pacs\Bridge;
 use Simrs\Pacs\OrthancException;
 use Simrs\Pacs\Settings;
 use Simrs\Pacs\WatermarkService;
-use Simrs\Pacs\ZipWriter;
 
 header('X-Content-Type-Options: nosniff');
 header('Access-Control-Allow-Origin: *');
@@ -446,24 +445,15 @@ try {
         }
 
         try {
-            $archive = $bridge->studies()->imagesByKey($m[1], $quality, $watermark);
+            $archive = $bridge->studies()->zipJpegByKey($m[1], $quality, $watermark);
         } catch (InvalidArgumentException $e) {
             respondJson(['error' => $e->getMessage()], 404);
         }
-        if ($archive['files'] === []) {
+        if ($archive === null) {
             respondJson(['error' => 'Tidak ada gambar untuk ' . $m[1]], 404);
         }
 
-        $folder = preg_replace('/[^A-Za-z0-9_.-]+/', '_', $archive['patient_id'] !== '' ? $archive['patient_id'] : $m[1]);
-        $folder = trim((string) $folder, '_') ?: $m[1];
-
-        $zip = new ZipWriter();
-        $zip->addDirectory($folder);
-        foreach ($archive['files'] as $file) {
-            $zip->addFile($folder . '/' . $file['name'], $file['content']);
-        }
-
-        respondBinary($zip->finish(), 'application/zip', $folder . '.zip');
+        respondBinary($archive['content'], 'application/zip', $archive['filename']);
     }
 
     if (preg_match('#^/studies/([A-Za-z0-9\-.]+)/zip$#', $path, $m)) {
