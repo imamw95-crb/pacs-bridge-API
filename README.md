@@ -3,11 +3,7 @@
 Bridge PHP tanpa framework untuk menghubungkan **SIMRS** dengan server **Orthanc PACS**
 (Modality Worklist DICOM + retrieval study/gambar). Dipakai untuk modalitas **DX**, **US**, dan **ECG**.
 
-```
-SIMRS --(POST /worklists)--> Bridge API --(Orthanc REST)--> Orthanc --(MWL C-FIND)--> Alat radiologi
-                                                                  |
-                            Bridge API <--(REST render/archive)----+  <-- C-STORE gambar
-```
+Alur lengkap (diagram Mermaid, otomatis dirender GitHub): lihat [Alur program](#alur-program).
 
 ## Fitur
 
@@ -20,6 +16,100 @@ SIMRS --(POST /worklists)--> Bridge API --(Orthanc REST)--> Orthanc --(MWL C-FIN
 | **ZIP** DICOM & ZIP berisi JPG (folder = No. RM) | `/studies/{acc}/zip`, `/zip-jpg` |
 | Dashboard web: worklist, study, viewer, pengaturan | `/` (`public/dashboard.html`) |
 | Autentikasi dashboard (manager/operator) + **API key** untuk program | `X-API-Key` |
+
+## Alur program
+
+Ringkasnya: **SIMRS mengirim order → Orthanc menyimpannya sebagai worklist → alat menarik order (C-FIND MWL)
+→ alat mengirim gambar (C-STORE) → SIMRS mengambil render/ZIP lewat bridge.**
+
+### 1. Peta komponen & dua cara memanggil
+
+```mermaid
+flowchart TB
+    subgraph SIMRS["SIMRS / aplikasi (PHP)"]
+        REG["Pendaftaran dan EMR"]
+        SDK["Pacs SDK — src/"]
+        CLI["BridgeApiClient — X-API-Key"]
+    end
+
+    subgraph BRIDGE["Bridge API — public/index.php"]
+        AUTH["Auth: sesi login / X-API-Key"]
+        SVC["WorklistService · StudyService · Settings"]
+    end
+
+    subgraph PACS["Orthanc PACS — 10.4.0.10"]
+        REST["REST :8042"]
+        MWL["Modality Worklist"]
+        IMG[("Study dan instance DICOM")]
+    end
+
+    MOD["Alat radiologi DX / US / ECG"]
+
+    REG --> SDK
+    REG --> CLI
+    SDK -->|"REST langsung"| REST
+    CLI -->|"HTTP + X-API-Key"| AUTH
+    AUTH --> SVC
+    SVC --> REST
+    REST --- MWL
+    REST --- IMG
+    MWL <-->|"MWL C-FIND"| MOD
+    MOD -->|"C-STORE gambar"| IMG
+```
+
+### 2. Alur kirim order (worklist MWL)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant S as SIMRS
+    participant B as Bridge API
+    participant O as Orthanc
+    participant M as Alat DX / US / ECG
+
+    S->>B: POST /worklists (X-API-Key)
+    B->>B: validasi + PatientName tanpa koma
+    B->>O: buat worklist (Tags DICOM, tanggal = hari ini)
+    O-->>B: id worklist
+    B-->>S: 201 id + accession_number
+    M->>O: C-FIND Modality Worklist (AET alat)
+    O-->>M: data pasien + prosedur
+    M->>O: C-STORE gambar + StudyInstanceUID yang sama
+    O->>O: entry worklist dihapus otomatis
+```
+
+### 3. Alur ambil hasil (polling study → gambar)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant S as SIMRS
+    participant B as Bridge API
+    participant O as Orthanc
+
+    loop sampai study muncul
+        S->>B: GET /studies?accession=...
+        B->>O: cari study (ExtendedFind, urut terbaru)
+        O-->>B: daftar study + modalitas
+        B-->>S: JSON study
+    end
+    S->>B: GET /studies/{acc}/jpg?watermark=1
+    B->>O: render JPEG (DICOMweb / instances)
+    O-->>B: JPEG
+    B->>B: watermark identitas (dilewati untuk US dan ECG)
+    B-->>S: image/jpeg
+    S->>B: GET /studies/{acc}/zip-jpg
+    B->>O: render semua instance pada study
+    B-->>S: application/zip (folder = No. RM)
+```
+
+### 4. Catatan alur
+
+- Worklist bersifat **tarik** (alat C-FIND), bukan push dari server.
+- Alat mengirim gambar via C-STORE; entry worklist dihapus Orthanc setelah study stabil diterima.
+- Bridge **stateless** untuk gambar — render/arsip selalu diambil ulang dari Orthanc.
+- Kunci `{acc}` fleksibel: AccessionNumber, ID Orthanc, atau StudyInstanceUID (berguna untuk study USG tanpa accession).
+- Endpoint data butuh **sesi login** atau **`X-API-Key`**; lihat [docs/API-KEY-SIMRS.pdf](docs/API-KEY-SIMRS.pdf).
 
 ## Kebutuhan
 
