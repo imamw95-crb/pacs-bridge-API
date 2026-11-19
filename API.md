@@ -882,7 +882,9 @@ Catatan operasional:
 - Bridge mencoba **3×** (backoff 0,5 detik; 1,5 detik). Bila tetap gagal, posisi diproses ulang
   pada jadwal berikutnya (at-least-once) — SIMRS **wajib idempotent** terhadap `study_id`.
 - Posisi terakhir disimpan di `data/notify-state.json`; log pengiriman di `data/callback.log`.
-- Cron (di server): lihat `deploy/cron-pacs-notify` — `*/1 * * * *`.
+- Cron (di server): lihat `deploy/cron-pacs-notify` — tiap menit, dijalankan **di dalam container**
+  (`docker exec -u www-data pacs-bridge php tools/notify-studies.php --quiet`); log ringkas
+  `/var/log/pacs-notify.log`, detail per kiriman `data/callback.log`.
 - Uji manual: `php tools/notify-studies.php --latest` / `--dry-run`.
 - Callback tidak aktif bila `callback_url` kosong.
 

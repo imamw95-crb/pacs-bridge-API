@@ -2,7 +2,8 @@
 # Pasang di /etc/cron.d/pacs-notify. Butuh callback_url & callback_key di Pengaturan.
 #
 # Log: /var/log/pacs-notify.log  (ringkasan) dan /opt/pacs-bridge/data/callback.log (per pengiriman)
+# Dijalankan DI DALAM container sebagai www-data (host tidak punya php), sama seperti cron pacs-pull.
 SHELL=/bin/sh
 PATH=/usr/local/bin:/usr/bin:/bin
 
-* * * * * pacs /usr/bin/php /opt/pacs-bridge/tools/notify-studies.php --quiet >> /var/log/pacs-notify.log 2>&1
+* * * * * root /usr/bin/docker exec -u www-data pacs-bridge /usr/local/bin/php /var/www/html/tools/notify-studies.php --quiet >> /var/log/pacs-notify.log 2>&1

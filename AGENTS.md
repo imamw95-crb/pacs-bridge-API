@@ -526,7 +526,10 @@ SIMRS tidak perlu polling. Isi **Callback URL** + **Callback key** di Pengaturan
 - At-least-once: retry 3× lalu berhenti (posisi tidak dimajukan) → diproses pada jadwal berikutnya.
   **Penerima wajib idempotent** per `study_id`.
 - Batas per eksekusi `--max=200`; dedupe `study_id` per run; log `data/callback.log`.
-- Cron: `deploy/cron-pacs-notify` (tiap menit). Uji: `--latest`, `--dry-run`, `--since=SEQ`.
+- Cron: `deploy/cron-pacs-notify` (tiap menit, dijalankan **di dalam container** sebagai
+  `www-data` — host 10.4.0.10 tidak punya `php`; log `/var/log/pacs-notify.log`).
+  Mode `--quiet` hanya menulis satu baris ringkasan bila ada callback yang diproses.
+  Uji: `--latest`, `--dry-run`, `--since=SEQ`.
 - Env override untuk uji: `PACS_CALLBACK_URL`, `PACS_CALLBACK_KEY`.
 
 ```powershell

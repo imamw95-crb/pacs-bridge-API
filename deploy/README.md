@@ -54,8 +54,10 @@ sudo docker run -d --name pacs-bridge --restart unless-stopped \
 ## Callback study baru (opsional)
 
 Pasang `deploy/cron-pacs-notify` ke `/etc/cron.d/pacs-notify` (tiap menit) dan isi
-**Callback URL** + **Callback key** di Pengaturan. Log: `/var/log/pacs-notify.log`
-(ringkasan) dan `/opt/pacs-bridge/data/callback.log` (per pengiriman).
+**Callback URL** + **Callback key** di Pengaturan. Cron menjalankannya **di dalam container**
+(`docker exec -u www-data pacs-bridge php tools/notify-studies.php --quiet`) karena host
+tidak punya `php`; log ringkas: `/var/log/pacs-notify.log`, detail per kiriman:
+`/opt/pacs-bridge/data/callback.log`.
 
 ## Catatan
 

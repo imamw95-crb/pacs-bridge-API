@@ -312,5 +312,12 @@ try {
     fclose($lock);
 }
 
-$out(sprintf('selesai: %d callback terkirim, %d gagal', $sent, $failed));
+if ($quiet) {
+    // mode cron: log hanya diisi bila memang ada callback yang diproses
+    if ($sent > 0 || $failed > 0) {
+        fwrite(STDOUT, sprintf('%s notify: %d terkirim, %d gagal', date('c'), $sent, $failed) . PHP_EOL);
+    }
+} else {
+    $out(sprintf('selesai: %d callback terkirim, %d gagal', $sent, $failed));
+}
 exit($failed === 0 ? 0 : 1);
