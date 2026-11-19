@@ -258,7 +258,7 @@ kecuali ganti password sendiri).</p>
 
 <h2>5. Contoh integrasi SIMRS</h2>
 
-<h3>5.1 Pakai <code>BridgeApiClient</code> (disarankan, tanpa dependency)</h3>
+<h3>5.1 PHP native — pakai <code>BridgeApiClient</code> (tanpa dependency)</h3>
 <pre><code>&lt;?php
 require_once '/path/ke/PACSPROJEC/src/autoload.php';
 
@@ -283,29 +283,51 @@ $jpg     = $api-&gt;jpegByAccession('A261105038', 90);    // ['content','mime','
 $zip     = $api-&gt;zipByAccession('A261105038');         // string biner ZIP | null</code></pre>
 <p class="small">Error dilempar sebagai <code>Simrs\Pacs\BridgeApiException</code> (berisi <code>statusCode</code>).</p>
 
-<h3>5.2 CodeIgniter 4</h3>
-<pre><code>// .env:  PACS_BRIDGE_KEY = &lt;API_KEY&gt;
+<h3>5.2 CodeIgniter 4 — library <code>PacsApi</code> (mode API)</h3>
+<pre><code>// .env / app/Config/Pacs.php
+//   pacs.bridgeUrl     = http://10.4.0.10
+//   pacs.bridgeTimeout = 60
+//   pacs.apiKey        = &lt;API_KEY&gt;
 
-$api = new \Simrs\Pacs\BridgeApiClient('http://10.4.0.10', env('PACS_BRIDGE_KEY'));
+$api = new \App\Libraries\PacsApi(config('Pacs'));   // atau service('pacsApi')
 
 $rows = $api-&gt;recentStudies('today', 12);
 return $this-&gt;response
     -&gt;setHeader('Content-Type', 'image/jpeg')
-    -&gt;setBody($api-&gt;jpegByAccession($order['accession'], 90)['content']);</code></pre>
+    -&gt;setBody($api-&gt;jpegByAccession($order['accession'], 90, true)['content']);</code></pre>
 
-<h3>5.3 CodeIgniter 3</h3>
-<pre><code>// .env / application/config/pacs.php
-$api = new \Simrs\Pacs\BridgeApiClient($this-&gt;config-&gt;item('bridge_url'),
-                                       getenv('PACS_BRIDGE_KEY'));
-$img = $api-&gt;jpegByAccession($accession, 90);
+<h3>5.3 CodeIgniter 3 — library <code>Pacs_api</code> (mode API)</h3>
+<pre><code>// application/config/pacs.php
+//   $config['bridge_url']     = 'http://10.4.0.10';
+//   $config['bridge_timeout'] = 60;
+//   $config['api_key']        = '&lt;API_KEY&gt;';
 
+$this-&gt;load-&gt;library('pacs_api');
+$img = $this-&gt;pacs_api-&gt;jpeg_by_accession($accession, 90, true);
+
+if ($img === null) {
+    log_message('error', $this-&gt;pacs_api-&gt;error_message());
+}
 $this-&gt;output
     -&gt;set_header('Content-Type: image/jpeg')
     -&gt;set_output($img === null ? '' : $img['content']);</code></pre>
 
-<p class="small muted">Catatan: library <code>App\Libraries\Pacs</code> (CI4) dan <code>Pacs_bridge</code> (CI3)
-adalah SDK yang memanggil <b>Orthanc langsung</b> — keduanya <b>tidak</b> memakai API key. Gunakan
-<code>BridgeApiClient</code> bila integrasi lewat Bridge API (cara B).</p>
+<p class="small muted">Dua mode integrasi CodeIgniter (pilih salah satu):</p>
+<table>
+  <thead><tr><th style="width:26%">Mode</th><th>Library</th><th style="width:30%">Alur &amp; autentikasi</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><b>A. Lewat Bridge API</b><br><span class="small">(disarankan)</span></td>
+      <td><code>App\Libraries\PacsApi</code> (CI4) · <code>Pacs_api</code> (CI3)</td>
+      <td>SIMRS → <code>http://10.4.0.10/</code> + <code>X-API-Key</code>; Orthanc <b>tidak</b> diakses SIMRS</td>
+    </tr>
+    <tr>
+      <td><b>B. Langsung Orthanc</b></td>
+      <td><code>App\Libraries\Pacs</code> (CI4) · <code>Pacs_bridge</code> (CI3)</td>
+      <td>SIMRS → <code>10.4.0.10:8042</code>; tanpa API key (batasi LAN/VPN)</td>
+    </tr>
+  </tbody>
+</table>
 
 <h3>5.4 Python / service lain</h3>
 <pre><code>import os, requests
@@ -404,6 +426,7 @@ open("hasil.jpg", "wb").write(img.content)</code></pre>
     <tr><td>Endpoint admin</td><td class="mono small">curl -H "X-API-Key: &lt;key&gt;" http://10.4.0.10/users</td><td class="c">403</td></tr>
     <tr><td>Mode kredensial</td><td class="mono small">curl -H "X-API-Key: &lt;key&gt;" http://10.4.0.10/me</td><td class="c"><code>"via": "api-key"</code></td></tr>
     <tr><td>Postman</td><td class="small">Import <code>postman/</code>, pilih environment <i>Live</i>, isi variabel <code>apiKey</code></td><td class="c">19 request OK</td></tr>
+    <tr><td>Library CodeIgniter</td><td class="mono small">PACS_BRIDGE_TEST_URL=http://10.4.0.10 PACS_BRIDGE_TEST_KEY=&lt;key&gt; php tools/test-ci-integration.php</td><td class="c">12 pass, 0 fail</td></tr>
   </tbody>
 </table>
 

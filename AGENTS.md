@@ -49,7 +49,7 @@ Modality yang dipakai: **DX** (Digital Radiography), AET `LEAD_CLIENT`.
 | `tools/test-users.php` | self-test peran user dashboard (manager vs operator), membuat & menghapus user uji |
 | `postman/` | **Postman collection + environment** untuk mencoba Bridge API secara manual (19 request) |
 | `API.md` | **dokumentasi REST API**: kemampuan, autentikasi, contoh respons, contoh konek (curl/PHP/CI/Python/Postman) |
-| `docs/API-KEY-SIMRS.pdf` | **dokumentasi API key siap cetak untuk tim SIMRS** (9 hlm): cara dapat key, header, tabel endpoint (✅/❌), contoh CI3/CI4, error, keamanan, checklist go-live. Sumber: `docs/API-KEY-SIMRS.html` |
+| `docs/API-KEY-SIMRS.pdf` | **dokumentasi API key siap cetak untuk tim SIMRS**: cara dapat key, header, tabel endpoint (✅/❌), mode integrasi CI (PacsApi/Pacs_api vs langsung), error, keamanan, checklist go-live. Sumber: `docs/API-KEY-SIMRS.html` |
 | `integrations/codeigniter/` | library + config + controller untuk SIMRS (CI3 & CI4), lihat `README.md` di dalamnya |
 | `dicom-probe.py` | alat uji DICOM: C-ECHO, MWL C-FIND, Study Root C-FIND |
 | `Dockerfile` | image produksi (php:8.3-apache, DocumentRoot `public/`, ekstensi mbstring) |

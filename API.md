@@ -30,7 +30,8 @@ untuk thumbnail), **ZIP** (semua DICOM satu study).
 ## 2. Autentikasi
 
 > **Versi siap cetak untuk tim SIMRS:** [`docs/API-KEY-SIMRS.pdf`](./docs/API-KEY-SIMRS.pdf)
-> (9 halaman) — cara memperoleh key, tabel endpoint yang butuh key, contoh CI3/CI4,
+> (PDF siap cetak) — cara memperoleh key, tabel endpoint yang butuh key, mode integrasi CI
+> (`PacsApi`/`Pacs_api` lewat Bridge API vs library langsung ke Orthanc),
 > penanganan error, keamanan/rotasi, dan checklist go-live.
 > Sumber HTML: [`docs/API-KEY-SIMRS.html`](./docs/API-KEY-SIMRS.html).
 
