@@ -31,7 +31,7 @@ class Pacs
     {
         $cfg = is_object($config) ? get_object_vars($config) : ($config ?? []);
 
-        $this->requireSdk(isset($cfg['pacsRoot']) ? (string) $cfg['pacsRoot'] : null);
+        self::requireSdk(isset($cfg['pacsRoot']) ? (string) $cfg['pacsRoot'] : null);
 
         $this->bridge = Bridge::fromArray([
             'server_ip'   => $cfg['serverIp'] ?? null,
@@ -233,8 +233,9 @@ class Pacs
 
     /**
      * Cari SDK (folder src/ + autoload.php) di beberapa lokasi yang wajar.
+     * Dipakai juga oleh `App\Libraries\PacsApi`.
      */
-    private function requireSdk(?string $pacsRoot): void
+    public static function requireSdk(?string $pacsRoot): void
     {
         $candidates = [];
 

@@ -50,6 +50,16 @@ final class BridgeApiClient
     }
 
     /**
+     * Nomor AccessionNumber baru (format alat Orthanc).
+     */
+    public function nextAccession(): string
+    {
+        $data = $this->json('GET', '/accession');
+
+        return (string) ($data['accession_number'] ?? '');
+    }
+
+    /**
      * @return list<array<string, mixed>>
      */
     public function worklists(): array
@@ -114,6 +124,17 @@ final class BridgeApiClient
     }
 
     /**
+     * @return list<array<string, mixed>>
+     */
+    public function findStudiesByName(string $name): array
+    {
+        /** @var list<array<string, mixed>> $data */
+        $data = $this->json('GET', '/studies?name=' . rawurlencode($name));
+
+        return $data;
+    }
+
+    /**
      * @param string $date 'today' | 'all' | 'YYYYMMDD'
      * @param string $modality kode DICOM (mis. 'US' untuk USG, 'DX' untuk rontgen); '' = semua
      * @return array{date: string, limit: int, modality?: string, studies: list<array<string, mixed>>}
@@ -132,11 +153,17 @@ final class BridgeApiClient
     }
 
     /**
+     * @param bool $watermark tambahkan watermark identitas (dilewati server untuk US & ECG)
      * @return array{content: string, mime: string, filename: string}|null
      */
-    public function jpegByAccession(string $accessionNumber, int $quality = 90): ?array
+    public function jpegByAccession(string $accessionNumber, int $quality = 90, bool $watermark = false): ?array
     {
-        return $this->image('/studies/' . rawurlencode($accessionNumber) . '/jpg?quality=' . max(1, min(100, $quality)));
+        $query = '?quality=' . max(1, min(100, $quality));
+        if ($watermark) {
+            $query .= '&watermark=1';
+        }
+
+        return $this->image('/studies/' . rawurlencode($accessionNumber) . '/jpg' . $query);
     }
 
     /**
@@ -147,6 +174,39 @@ final class BridgeApiClient
         $query = $width !== null ? '?width=' . max(64, $width) : '';
 
         return $this->image('/studies/' . rawurlencode($accessionNumber) . '/png' . $query);
+    }
+
+    /**
+     * Daftar instance/gambar satu study (accession, ID Orthanc, atau DICOM UID).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function imagesByAccession(string $accessionNumber): array
+    {
+        try {
+            /** @var list<array<string, mixed>> $data */
+            $data = $this->json('GET', '/studies/' . rawurlencode($accessionNumber) . '/images');
+
+            return $data;
+        } catch (BridgeApiException $e) {
+            if ($e->statusCode === 404) {
+                return [];
+            }
+
+            throw $e;
+        }
+    }
+
+    /**
+     * ZIP berisi semua JPG study (satu folder = No. RM).
+     *
+     * @return array{content: string, mime: string, filename: string}|null
+     */
+    public function zipJpgByAccession(string $accessionNumber, int $quality = 90, bool $watermark = true): ?array
+    {
+        $query = sprintf('?quality=%d&watermark=%d', max(1, min(100, $quality)), $watermark ? 1 : 0);
+
+        return $this->image('/studies/' . rawurlencode($accessionNumber) . '/zip-jpg' . $query);
     }
 
     public function zipByAccession(string $accessionNumber): ?string

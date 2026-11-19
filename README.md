@@ -141,7 +141,7 @@ Konfigurasi bisa dioverride lewat environment:
 |---|---|
 | [`API.md`](API.md) | referensi REST API: autentikasi, endpoint, contoh respons, contoh konek |
 | [`docs/API-KEY-SIMRS.pdf`](docs/API-KEY-SIMRS.pdf) | **panduan API key untuk tim SIMRS** (cetak): tabel endpoint ✅/❌, contoh CI3/CI4, error, checklist go-live |
-| [`integrations/codeigniter/README.md`](integrations/codeigniter/README.md) | library CodeIgniter 3 & 4 |
+| [`integrations/codeigniter/README.md`](integrations/codeigniter/README.md) | library CodeIgniter 3 & 4 — **mode API** (lewat bridge, `X-API-Key`) atau langsung ke Orthanc |
 | [`PACS-ORTHANC.md`](PACS-ORTHANC.md) | catatan teknis server PACS (temuan & quirk) |
 | [`AGENTS.md`](AGENTS.md) | aturan kerja developer/agent |
 | [`deploy/README.md`](deploy/README.md) | deploy container + cron tarikan study |

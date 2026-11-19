@@ -35,8 +35,17 @@ class Pacs extends BaseConfig
     public ?string $password = null;
 
     /**
-     * API key **Bridge API** (dipakai `Simrs\Pacs\BridgeApiClient`), bukan library ini.
-     * Library `App\Libraries\Pacs` memanggil REST Orthanc langsung sehingga tidak memakai key.
+     * Base URL **Bridge API** (program ini), mis. `http://10.4.0.10`.
+     * Dipakai `App\Libraries\PacsApi` (mode API + `X-API-Key`).
+     */
+    public string $bridgeUrl = 'http://10.4.0.10';
+
+    /** Timeout HTTP ke Bridge API (detik); ZIP/gambar besar butuh lebih lama. */
+    public int $bridgeTimeout = 60;
+
+    /**
+     * API key **Bridge API** (dipakai `App\Libraries\PacsApi` / `Simrs\Pacs\BridgeApiClient`),
+     * bukan library `Pacs` yang memanggil REST Orthanc langsung.
      */
     public string $apiKey = '';
 }

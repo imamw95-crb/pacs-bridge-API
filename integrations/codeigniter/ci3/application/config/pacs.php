@@ -19,6 +19,10 @@ $config['timeout']     = 30;
 $config['user']        = null;
 $config['password']    = null;
 
-// API key Bridge API (untuk Simrs\Pacs\BridgeApiClient).
+// Base URL program Bridge API (mode API — SIMRS tidak mengakses Orthanc langsung)
+$config['bridge_url']     = 'http://10.4.0.10';
+$config['bridge_timeout'] = 60;
+
+// API key Bridge API (dipakai Pacs_api / Simrs\Pacs\BridgeApiClient).
 // Library Pacs_bridge memanggil REST Orthanc langsung, jadi tidak memakai key ini.
 $config['api_key']     = '';

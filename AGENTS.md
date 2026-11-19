@@ -578,23 +578,26 @@ Di Laragon: arahkan docroot ke folder `public/`.
 
 ## 12. Integrasi CodeIgniter (SIMRS)
 
-SIMRS berbasis CodeIgniter. Dua varian disiapkan tanpa mengubah SDK inti:
+SIMRS berbasis CodeIgniter. **Dua mode** disiapkan tanpa mengubah SDK inti:
 
-| Varian | Library | Konvensi method |
-|---|---|---|
-| CI4 | `App\Libraries\Pacs` (`integrations/codeigniter/ci4/app/Libraries/Pacs.php`) | `createOrder()`, `findStudies()`, `jpegByAccession()` |
-| CI3 | `Pacs_bridge` (`integrations/codeigniter/ci3/application/libraries/Pacs_bridge.php`) | `create_order()`, `find_studies()`, `jpeg_by_accession()` |
+| Mode | CI4 | CI3 | Alur / auth |
+|---|---|---|---|
+| **A. Bridge API** (disarankan) | `App\Libraries\PacsApi` | `Pacs_api` | HTTP ke `http://10.4.0.10/` + `X-API-Key`; Orthanc **tidak** diakses SIMRS |
+| **B. Langsung Orthanc** | `App\Libraries\Pacs` | `Pacs_bridge` | REST `10.4.0.10:8042`, tanpa auth (batasi LAN) |
 
-Keduanya juga membungkus fitur API terbaru: `nextAccession()`, `recentStudies()`,
+Keduanya membungkus fitur terbaru: `nextAccession()`, `recentStudies()`,
 `findStudiesByPatientId()/ByName()`, `imageList()`, `zipJpgByAccession()` (folder = No. RM),
 dan `zipByAccession()`. Semua wrapper hanya memanggil service di `src/` (tidak ada logika HTTP
-baru di adapter), sehingga perilakunya sama dengan REST API.
+baru di adapter), sehingga perilakunya sama dengan REST API. Mode A memakai wrapper tipis di atas
+`Simrs\Pacs\BridgeApiClient` (bukan menulis cURL sendiri).
 
 ### Aturan saat menyentuh kode integrasi
 
-1. **Jangan duplikasi logika HTTP** — semua tetap lewat `src/OrthancClient.php` dan service di `src/`.
+1. **Jangan duplikasi logika HTTP** — mode B lewat `src/OrthancClient.php` + service `src/`;
+   mode A lewat `src/BridgeApiClient.php`. Adapter tidak boleh membuat request cURL sendiri.
 2. Perubahan perilaku wajib di `src/` (bukan di adapter CI), agar CI3/CI4/REST konsisten.
-3. Adapter CI hanya berisi: resolusi path SDK, mapping config framework → array `Bridge::fromArray()`, dan konversi response.
+3. Adapter CI hanya berisi: resolusi path SDK, mapping config framework → array `Bridge::fromArray()`
+   (mode B) atau `BridgeApiClient` (mode A), dan konversi response.
 4. CI3: tangkap error sebagai `false` + `error_message()` (konvensi CI3), bukan exception.
 5. CI4: lempar `Throwable` dan biarkan controller yang mengubahnya jadi HTTP status.
 6. Nama method mengikuti konvensi framework (CI4 camelCase, CI3 snake_case) — jangan diseragamkan.
@@ -602,12 +605,16 @@ baru di adapter), sehingga perilakunya sama dengan REST API.
 ### Instalasi singkat
 
 ```
-CI4: <SIMRS>/app/ThirdParty/pacs/src/  +  app/Libraries/Pacs.php, app/Config/Pacs.php
-CI3: <SIMRS>/application/third_party/pacs/src/  +  application/libraries/Pacs_bridge.php,
-                                                   application/config/pacs.php
+Mode A (Bridge API, tanpa akses Orthanc):
+CI4: app/Libraries/PacsApi.php + app/Config/Pacs.php (bridgeUrl, apiKey, bridgeTimeout)
+CI3: application/libraries/Pacs_api.php + application/config/pacs.php (bridge_url, api_key)
+
+Mode B (langsung Orthanc):
+CI4: <SIMRS>/app/ThirdParty/pacs/src/ + app/Libraries/Pacs.php, app/Config/Pacs.php
+CI3: application/third_party/pacs/src/ + application/libraries/Pacs_bridge.php, config/pacs.php
 ```
 
-Config framework → SDK:
+Config framework → SDK (mode B):
 
 ```php
 Bridge::fromArray([
@@ -619,7 +626,12 @@ Bridge::fromArray([
 ### Verifikasi
 
 ```powershell
-php tools/test-ci-integration.php     # 9 pass, 0 fail (CI3 + CI4)
+php tools/test-ci-integration.php     # 9 pass, 0 fail (mode B)
+
+# termasuk mode A (butuh bridge berjalan + key)
+$env:PACS_BRIDGE_TEST_URL='http://127.0.0.1:8081'
+$env:PACS_BRIDGE_TEST_KEY='<API_KEY>'
+php tools/test-ci-integration.php     # 12 pass, 0 fail
 ```
 
 ---

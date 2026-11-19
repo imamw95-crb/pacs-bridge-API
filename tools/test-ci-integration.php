@@ -214,5 +214,70 @@ check('CI3 library: next_accession + recent_studies + zip_jpg', static function 
     return 'acc=' . $accession . ', ' . count($recent) . ' study, zip ' . strlen($zip['content']) . 'B';
 });
 
+// ---------- Mode API: Bridge API + X-API-Key (opsional) ----------
+$bridgeUrl = (string) getenv('PACS_BRIDGE_TEST_URL');
+$bridgeKey = (string) getenv('PACS_BRIDGE_TEST_KEY');
+
+if ($bridgeUrl !== '' && $bridgeKey !== '') {
+    require_once __DIR__ . '/../integrations/codeigniter/ci4/app/Libraries/PacsApi.php';
+    require_once __DIR__ . '/../integrations/codeigniter/ci3/application/libraries/Pacs_api.php';
+
+    $apiCfg = [
+        'pacsRoot'      => dirname(__DIR__),
+        'bridgeUrl'     => $bridgeUrl,
+        'apiKey'        => $bridgeKey,
+        'bridgeTimeout' => 60,
+    ];
+
+    check('CI4 PacsApi: health + me', static function () use ($apiCfg): string {
+        $api = new App\Libraries\PacsApi($apiCfg);
+        $health = $api->health();
+        $me = $api->me();
+        if (($me['via'] ?? '') !== 'api-key') {
+            throw new RuntimeException('kredensial bukan api-key');
+        }
+
+        return 'Orthanc ' . ($health['version'] ?? '?') . ', via=' . $me['via'];
+    });
+
+    check('CI4 PacsApi: nextAccession + recent + zipJpg', static function () use ($apiCfg): string {
+        $api = new App\Libraries\PacsApi($apiCfg);
+        $accession = $api->nextAccession();
+        if (preg_match('/^\d{8,16}$/', $accession) !== 1) {
+            throw new RuntimeException('format accession tidak valid: ' . $accession);
+        }
+        $recent = $api->recentStudies('today', 3);
+        $zip = $api->zipJpgByAccession('A261105038', 80, false);
+        if ($zip === null || !str_starts_with($zip['content'], 'PK')) {
+            throw new RuntimeException('ZIP JPG tidak valid');
+        }
+
+        return 'acc=' . $accession . ', ' . count($recent['studies'] ?? []) . ' study, zip ' . strlen($zip['content']) . 'B';
+    });
+
+    check('CI3 Pacs_api: health + next_accession + zip_jpg', static function () use ($bridgeUrl, $bridgeKey): string {
+        $lib = new Pacs_api([
+            'pacs_root'      => dirname(__DIR__),
+            'bridge_url'     => $bridgeUrl,
+            'api_key'        => $bridgeKey,
+            'bridge_timeout' => 60,
+        ]);
+        $health = $lib->health();
+        $accession = $lib->next_accession();
+        $zip = $lib->zip_jpg_by_accession('A261105038', 80, false);
+
+        if ($accession === false || $lib->error_message() !== '') {
+            throw new RuntimeException('next_accession gagal: ' . $lib->error_message());
+        }
+        if ($zip === null || !str_starts_with($zip['content'], 'PK')) {
+            throw new RuntimeException('ZIP JPG tidak valid: ' . $lib->error_message());
+        }
+
+        return 'reachable=' . (!empty($health['reachable']) ? 'ya' : 'tidak') . ', acc=' . $accession;
+    });
+} else {
+    echo "[SKIP] Mode API: set PACS_BRIDGE_TEST_URL & PACS_BRIDGE_TEST_KEY untuk menguji PacsApi/Pacs_api\n";
+}
+
 echo "\n=== Ringkasan: {$pass} pass, {$fail} fail ===\n";
 exit($fail === 0 ? 0 : 1);
