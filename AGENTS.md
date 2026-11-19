@@ -28,6 +28,8 @@ Modality yang dipakai: **DX** (Digital Radiography), AET `LEAD_CLIENT`.
 | `src/StudyService.php` | cari study, render PNG/JPEG, ambil DICOM/ZIP |
 | `src/ZipWriter.php` | pembuat arsip ZIP minimal (store, tanpa ekstensi zip) untuk ZIP berisi JPG |
 | `src/WatermarkService.php` | watermark identitas pasien pada JPG (GD + FreeType, teks orange); dilewati untuk modalitas US & ECG |
+| `src/AuditLogger.php` | audit JSON Lines (`data/audit.log`): setiap request + event aksi penting, rotasi 5 MB |
+| `src/WorklistConflictException.php` | konflik AccessionNumber (HTTP 409 `ACCESSION_CONFLICT`) |
 | `src/Bridge.php` | facade (`Bridge::fromSettingFile()`) |
 | `src/BridgeApiClient.php` | HTTP client untuk **Bridge API** (pakai header `X-API-Key`) |
 | `src/BridgeApiException.php` | exception khusus Bridge API (401/403/5xx) |
@@ -46,6 +48,9 @@ Modality yang dipakai: **DX** (Digital Radiography), AET `LEAD_CLIENT`.
 | `tools/pull-santesrv1.cmd` + `tools/pull-santesrv1-hidden.vbs` | wrapper Windows Task Scheduler (tanpa jendela console, log ke `data/pull-windows.log`) |
 | `tools/test-ci-integration.php` | self-test library integrasi CI3 & CI4 |
 | `tools/test-api-key.php` | self-test API key pada Bridge API (`BridgeApiClient`) |
+| `tools/test-order-flow.php` | self-test idempotensi order, 409 konflik, status order, 404, dan audit |
+| `tools/notify-studies.php` | worker **callback study baru** ke SIMRS (`/changes` → POST + HMAC, inkremental) |
+| `deploy/cron-pacs-notify` | jadwal cron tiap menit untuk `tools/notify-studies.php` |
 | `tools/test-users.php` | self-test peran user dashboard (manager vs operator), membuat & menghapus user uji |
 | `postman/` | **Postman collection + environment** untuk mencoba Bridge API secara manual (19 request) |
 | `API.md` | **dokumentasi REST API**: kemampuan, autentikasi, contoh respons, contoh konek (curl/PHP/CI/Python/Postman) |
@@ -140,6 +145,14 @@ PACS_HTTP_USER, PACS_HTTP_PASS, PACS_BRIDGE_KEY, PACS_TIMEOUT, PACS_TIMEZONE (de
 - Study bisa datang **tanpa AccessionNumber** (mis. workstation USG). Resolusi kunci study
   lewat `StudyService::findOneByKey()` (accession → ID Orthanc → DICOM UID) dan dashboard
   memakai `ID` Orthanc sebagai kunci cadangan supaya gambar/ZIP tetap bisa dibuka.
+- `POST /worklists` **idempotent per `accession_number`**: kirim ulang (retry timeout) mengembalikan
+  order yang sama (`200`, `created:false`); accession milik pasien lain → `409 ACCESSION_CONFLICT`.
+- Status order untuk petugas memakai `GET /worklists/{acc}/status` (`sent`/`taken`/`completed`/`cancelled`),
+  dihitung dari worklist + study + audit — jangan menyuruh SIMRS menebak dari polling gambar.
+- Semua request dicatat `AuditLogger` (`data/audit.log`); aksi penting (create/update/delete order,
+  settings/user, login) dicatat sebagai `event`. Akses riwayat: `GET /audit` (manager).
+- Callback study baru: worker `tools/notify-studies.php` (cron `deploy/cron-pacs-notify`) memantau
+  `/changes` Orthanc dan POST `study.received` + HMAC (`X-Bridge-Signature`) ke `callback_url`.
 
 ### DON'T
 
@@ -224,10 +237,12 @@ if ($img !== null) {
 | GET | `/health` | status Orthanc + status worklist (`worklist.reachable`, jumlah order) + jumlah study |
 | GET | `/accession` | nomor AccessionNumber baru mengikuti format alat Orthanc (dipakai form order) |
 | GET | `/worklists` | daftar order |
-| POST | `/worklists` | buat order (JSON) |
+| POST | `/worklists` | buat order (JSON) — **idempotent** per `accession_number` (`201` baru / `200` sudah ada / `409` accession milik pasien lain) |
 | GET | `/worklists/{id}` | detail order |
+| GET | `/worklists/{acc}/status` | status order untuk petugas: `sent` / `taken` / `completed` / `cancelled` + timeline dari audit |
 | PUT | `/worklists/{id}` | ubah order |
 | DELETE | `/worklists/{id}` | hapus order |
+| GET | `/audit?limit=50&accession=...` | riwayat audit (request + event) — **manager** |
 | GET | `/studies?accession=...` | cari study |
 | GET | `/studies?patient_id=...` | cari study per pasien |
 | GET | `/studies?name=...` | cari study per **nama pasien** (parsial, wildcard `*KATA*KATA*`, maks 50 study terbaru; alias `patient_name`) |
@@ -384,6 +399,7 @@ curl -H "X-API-Key: $PACS_BRIDGE_KEY" \
 | `GET /settings` | ✅ | ✅ (tanpa info API key) | ✅ |
 | **`PUT /settings`** (ubah IP/port/AET) | ✅ | ❌ **403** | ❌ **403** |
 | **`GET /settings/api-key`** | ✅ | ❌ **403** | ❌ **403** |
+| **`GET /audit`** (riwayat audit) | ✅ | ❌ **403** | ❌ **403** |
 | **`POST /settings/password`** (akun sendiri) | ✅ | ✅ | ❌ **403** |
 | **`/users`** (kelola user) | ✅ | ❌ **403** | ❌ **403** |
 | `/login`, `/logout`, `/me` | publik | publik | publik |
@@ -499,6 +515,26 @@ Dua peran (disimpan di `data/settings.json` → `users[]`):
 - Instalasi lama (hanya `admin_user` + `admin_password_hash`) otomatis dimigrasikan menjadi
   `users[]` saat user pertama kali dikelola; password admin lama tetap berlaku.
 
+### 6.8 Callback study baru (bridge → SIMRS)
+
+SIMRS tidak perlu polling. Isi **Callback URL** + **Callback key** di Pengaturan
+(`callback_url`, `callback_key` di `data/settings.json`; key dikembalikan ter-mask).
+
+- Worker: `tools/notify-studies.php` — memantau `GET /changes` Orthanc (sequence terakhir di
+  `data/notify-state.json`), mengirim `POST study.received` ke `callback_url`.
+- Header: `X-Bridge-Event`, `X-Bridge-Key`, `X-Bridge-Signature: sha256=HMAC(body, callback_key)`.
+- At-least-once: retry 3× lalu berhenti (posisi tidak dimajukan) → diproses pada jadwal berikutnya.
+  **Penerima wajib idempotent** per `study_id`.
+- Batas per eksekusi `--max=200`; dedupe `study_id` per run; log `data/callback.log`.
+- Cron: `deploy/cron-pacs-notify` (tiap menit). Uji: `--latest`, `--dry-run`, `--since=SEQ`.
+- Env override untuk uji: `PACS_CALLBACK_URL`, `PACS_CALLBACK_KEY`.
+
+```powershell
+php tools/notify-studies.php --latest --dry-run     # lihat payload
+php tools/notify-studies.php --latest               # kirim ulang study terbaru (uji)
+php tools/notify-studies.php --quiet                # mode cron
+```
+
 ---
 
 ## 7. Perintah
@@ -512,6 +548,13 @@ php tools/test-ci-integration.php
 
 # self-test API key pada Bridge API
 php tools/test-api-key.php http://127.0.0.1:8081 <API_KEY>
+
+# self-test idempotensi order, status, 409, dan audit (Bridge API)
+php tools/test-order-flow.php http://127.0.0.1:8081 <API_KEY>
+
+# pratinjau/kirim callback study baru
+php tools/notify-studies.php --latest --dry-run
+php tools/notify-studies.php --latest
 
 # self-test peran user (manager vs operator) — membuat & menghapus user uji
 php tools/test-users.php http://127.0.0.1:8081 admin admin
@@ -545,9 +588,13 @@ Di Laragon: arahkan docroot ke folder `public/`.
 1. `php -l` bersih untuk semua file yang diubah.
 2. `php tools/selftest.php` → **8 pass, 0 fail**.
 3. Endpoint API merespons: `/health` 200, `/studies/{acc}/jpg` mengembalikan `image/jpeg`.
-4. Entry worklist yang dibuat **selalu dihapus** di akhir pengujian (jangan tinggalkan order palsu di server produksi).
-5. Jangan menguji C-STORE gambar palsu ke PACS produksi tanpa izin + rencana penghapusan.
-6. Perubahan pada autentikasi/user: `php tools/test-users.php <baseUrl> <manager> <password>` → **19 pass, 0 fail**
+4. Perubahan pada order/status/audit: `php tools/test-order-flow.php <baseUrl> <API_KEY>` → **8 pass, 0 fail**
+   (idempotensi, 409, status `sent`→`cancelled`, 404, `/audit` 403 untuk key).
+5. Callback: `php tools/notify-studies.php --latest --dry-run` menampilkan payload; dengan receiver aktif,
+   `--latest` → `[OK] … HTTP 200` dan `data/callback.log` berisi entri `ok:true`.
+6. Entry worklist yang dibuat **selalu dihapus** di akhir pengujian (jangan tinggalkan order palsu di server produksi).
+7. Jangan menguji C-STORE gambar palsu ke PACS produksi tanpa izin + rencana penghapusan.
+8. Perubahan pada autentikasi/user: `php tools/test-users.php <baseUrl> <manager> <password>` → **19 pass, 0 fail**
    (tool ini membuat user uji lalu menghapusnya sendiri).
 
 ---

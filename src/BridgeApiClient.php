@@ -102,6 +102,17 @@ final class BridgeApiClient
     }
 
     /**
+     * Status order berdasarkan AccessionNumber:
+     * sent | taken | completed | cancelled (+ label & timeline).
+     *
+     * @return array<string, mixed>
+     */
+    public function orderStatus(string $accessionNumber): array
+    {
+        return $this->json('GET', '/worklists/' . rawurlencode($accessionNumber) . '/status');
+    }
+
+    /**
      * @return list<array<string, mixed>>
      */
     public function findStudiesByAccession(string $accessionNumber): array

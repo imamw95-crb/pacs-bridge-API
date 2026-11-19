@@ -489,6 +489,23 @@
               <button type="button" class="ghost danger" id="btnClearKey" style="display:none" title="Kosongkan API key (berlaku setelah Simpan)">Hapus</button>
             </div>
           </div>
+          <div>
+            <label for="sCallbackUrl">Callback URL (opsional)</label>
+            <input id="sCallbackUrl" class="mono" placeholder="http://simrs.local/api/pacs/callback">
+          </div>
+          <div>
+            <label for="sCallbackKey">Callback key (HMAC-SHA256)</label>
+            <div class="row" style="gap:8px">
+              <input id="sCallbackKey" class="mono" placeholder="kosong = tidak berubah">
+              <button type="button" class="ghost" id="btnGenCallbackKey" title="Buat callback key acak 48 karakter">Generate</button>
+              <button type="button" class="ghost danger" id="btnClearCallbackKey" style="display:none" title="Kosongkan callback key (berlaku setelah Simpan)">Hapus</button>
+            </div>
+          </div>
+        </div>
+        <div class="muted" style="font-size:12px;margin-top:6px">
+          Bila Callback URL diisi, worker <code>tools/notify-studies.php</code> (cron tiap menit) mengirim
+          <code>POST</code> event <code>study.received</code> ke URL tersebut saat study baru masuk, dengan
+          header <code>X-Bridge-Signature</code> = <code>sha256=HMAC(body, callback key)</code>.
         </div>
       </div>
 
@@ -690,6 +707,7 @@
   let studyFilter = 'today';
   let studyModality = '';
   let pendingClearKey = false;
+let pendingClearCallback = false;
   let studyLimit = 24;
   let currentRecent = null;
 
@@ -933,7 +951,11 @@
           station_aet: currentDevice().aet
         })
       });
-      toast('Order terkirim: ' + (created.patient_name || ''), 'ok');
+      if (created.created === false) {
+        toast('Order sudah ada (accession sama) — tidak dibuat ganda: ' + (created.patient_name || ''), 'ok');
+      } else {
+        toast('Order terkirim: ' + (created.patient_name || ''), 'ok');
+      }
       $('orderForm').reset();
       fillAccession();
       loadWorklist();
@@ -1471,6 +1493,12 @@
       $('sApiKey').placeholder = s.has_api_key ? '(sudah diset — isi untuk mengganti)' : 'kosong = pakai sesi login';
       pendingClearKey = false;
       $('btnClearKey').style.display = s.has_api_key ? '' : 'none';
+
+      $('sCallbackUrl').value = s.callback_url || '';
+      $('sCallbackKey').value = '';
+      $('sCallbackKey').placeholder = s.has_callback_key ? '(sudah diset — isi untuk mengganti)' : 'kosong = tidak berubah';
+      pendingClearCallback = false;
+      $('btnClearCallbackKey').style.display = s.has_callback_key ? '' : 'none';
       loadUsers();
 
       try {
@@ -1726,6 +1754,22 @@
     $('btnToggleKey').textContent = show ? 'Sembunyikan' : 'Tampilkan';
   });
 
+  $('btnGenCallbackKey').addEventListener('click', () => {
+    const buf = new Uint8Array(24);
+    crypto.getRandomValues(buf);
+    $('sCallbackKey').value = Array.from(buf, (b) => b.toString(16).padStart(2, '0')).join('');
+    pendingClearCallback = false;
+    $('btnClearCallbackKey').style.display = 'none';
+    toast('Callback key dibuat — klik "Simpan Pengaturan" untuk mengaktifkan');
+  });
+
+  $('btnClearCallbackKey').addEventListener('click', () => {
+    pendingClearCallback = true;
+    $('sCallbackKey').value = '';
+    $('btnClearCallbackKey').style.display = 'none';
+    toast('Callback key akan dihapus setelah "Simpan Pengaturan"');
+  });
+
   $('settingsForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const btn = $('btnSaveSettings');
@@ -1747,12 +1791,18 @@
       if (newKey !== '') payload.api_key = newKey;
       else if (pendingClearKey) payload.api_key = '';
 
+      payload.callback_url = $('sCallbackUrl').value.trim();
+      const callbackKey = $('sCallbackKey').value.trim();
+      if (callbackKey !== '') payload.callback_key = callbackKey;
+      else if (pendingClearCallback) payload.callback_key = '';
+
       await api('settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
       pendingClearKey = false;
+      pendingClearCallback = false;
       toast('Pengaturan disimpan', 'ok');
       $('settings').classList.remove('open');
       loadDevices();

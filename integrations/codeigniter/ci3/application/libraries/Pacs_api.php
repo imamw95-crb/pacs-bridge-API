@@ -106,6 +106,22 @@ class Pacs_api
     }
 
     /**
+     * Status order berdasarkan AccessionNumber: sent | taken | completed | cancelled.
+     *
+     * @return array<string, mixed>
+     */
+    public function order_status(string $accession_number): array
+    {
+        try {
+            return $this->client->orderStatus($accession_number);
+        } catch (\Throwable $e) {
+            $this->fail('order_status', $e);
+
+            return [];
+        }
+    }
+
+    /**
      * @param array<string, mixed> $order
      * @return array<string, mixed>|false
      */

@@ -10,11 +10,14 @@ Alur lengkap (diagram Mermaid, otomatis dirender GitHub): lihat [Alur program](#
 
 | Fitur | Endpoint utama |
 |---|---|
-| Kirim order pasien ke **worklist (MWL)** | `POST /worklists` |
+| Kirim order pasien ke **worklist (MWL)** — **idempotent** per accession | `POST /worklists` |
+| **Status order** untuk petugas (terkirim / diproses / gambar masuk / dibatalkan) | `GET /worklists/{acc}/status` |
 | Nomor `AccessionNumber` otomatis (format alat) | `GET /accession` |
 | Cari study (accession / No. RM / nama pasien) | `GET /studies`, `GET /studies/recent` |
 | Gambar **JPEG/PNG** (opsional ber-watermark identitas) | `/studies/{acc}/jpg`, `/png` |
 | **ZIP** DICOM & ZIP berisi JPG (folder = No. RM) | `/studies/{acc}/zip`, `/zip-jpg` |
+| **Callback** `study.received` ke SIMRS (HMAC, tanpa polling) | `tools/notify-studies.php` |
+| **Audit log** siapa/kapan/order apa + `GET /audit` | `data/audit.log` |
 | Dashboard web: worklist, study, viewer, pengaturan | `/` (`public/dashboard.html`) |
 | Autentikasi dashboard (manager/operator) + **API key** untuk program | `X-API-Key` |
 
@@ -102,11 +105,17 @@ sequenceDiagram
     S->>B: GET /studies/{acc}/zip-jpg
     B->>O: render semua instance pada study
     B-->>S: application/zip (folder = No. RM)
+    Note over B,S: Tanpa polling: cron bridge mengirim POST study.received (HMAC) ke callback SIMRS
 ```
 
 ### 4. Catatan alur
 
 - Worklist bersifat **tarik** (alat C-FIND), bukan push dari server.
+- `POST /worklists` idempotent per `AccessionNumber` (retry aman; `409` bila accession milik pasien lain).
+- **Tanpa polling**: isi *Callback URL* + *Callback key* di Pengaturan → bridge mengirim
+  `POST study.received` (HMAC `X-Bridge-Signature`) saat study baru stabil.
+- Status order (`sent` / `taken` / `completed` / `cancelled`) tersedia di `GET /worklists/{acc}/status`.
+- Semua panggilan tercatat di audit log (`data/audit.log`, `GET /audit` untuk manager).
 - Alat mengirim gambar via C-STORE; entry worklist dihapus Orthanc setelah study stabil diterima.
 - Bridge **stateless** untuk gambar — render/arsip selalu diambil ulang dari Orthanc.
 - Kunci `{acc}` fleksibel: AccessionNumber, ID Orthanc, atau StudyInstanceUID (berguna untuk study USG tanpa accession).

@@ -47,6 +47,41 @@ final class OrthancClient
     }
 
     /**
+     * Sequence perubahan terakhir Orthanc (untuk inisialisasi callback tanpa
+     * memutar ulang seluruh riwayat).
+     */
+    public function lastSequence(): int
+    {
+        /** @var array{Last?: int} $data */
+        $data = $this->json('GET', '/changes?last=true');
+
+        return (int) ($data['Last'] ?? 0);
+    }
+
+    /**
+     * Daftar perubahan Orthanc sejak sequence tertentu (`/changes`).
+     * Dipakai `tools/notify-studies.php` untuk callback study baru.
+     *
+     * @return array{Changes: list<array<string, mixed>>, Last: int, Done: bool}
+     */
+    public function changes(int $since, int $limit = 100, bool $expand = true): array
+    {
+        $query = ['since' => (string) max(0, $since), 'limit' => (string) max(1, $limit)];
+        if ($expand) {
+            $query['expand'] = 'true';
+        }
+
+        /** @var array{Changes?: list<array<string, mixed>>, Last?: int, Done?: bool} $data */
+        $data = $this->json('GET', $this->withQuery('/changes', $query));
+
+        return [
+            'Changes' => $data['Changes'] ?? [],
+            'Last'    => (int) ($data['Last'] ?? $since),
+            'Done'    => (bool) ($data['Done'] ?? true),
+        ];
+    }
+
+    /**
      * Cari resource (Study/Series/Instance/Patient) memakai /tools/find.
      *
      * @param array<string, string> $query

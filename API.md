@@ -162,6 +162,9 @@ sesi selalu `401`, karena API ini memang tidak punya endpoint data terbuka.
 | 15 | Ubah konfigurasi (khusus manager login) | `PUT /settings` | pindah IP/port/AET tanpa edit file |
 | 16 | Ganti password akun sendiri | `POST /settings/password` | keamanan |
 | 17 | **Kelola user dashboard** (manager/operator) | `GET/POST /users`, `PUT/DELETE /users/{username}` | buat akun operator tanpa akses Pengaturan |
+| 18 | **Status order untuk petugas** | `GET /worklists/{acc}/status` | tampilkan "terkirim / diproses / gambar masuk / dibatalkan" tanpa polling gambar |
+| 19 | **Audit log** (siapa, kapan, order apa) | `GET /audit` | telusuri pembuatan/penghapusan order & perubahan konfigurasi (manager) |
+| 20 | **Callback/webhook study baru** | `tools/notify-studies.php` + `callback_url` | SIMRS menerima `POST study.received` (HMAC) tanpa polling |
 
 Catatan penting: bridge **tidak menyimpan gambar** — semua endpoint gambar mengambil
 langsung dari Orthanc saat dipanggil (stateless).
@@ -291,15 +294,43 @@ Field **opsional**: `title`, `modality`, `station_aet`, `start_date` (`YYYYMMDD`
 }
 ```
 
-Respons `201`:
+Respons `201` (order baru dibuat):
 
 ```json
 {
   "id": "5b16e282-d4e2-439e-9fab-07d6b9e90675",
   "patient_name": "BUDI SANTOSO TN.",
-  "accession_number": "A260100001"
+  "accession_number": "A260100001",
+  "created": true,
+  "duplicate": false
 }
 ```
+
+**Idempotent (aman dikirim ulang).** Kuncinya `accession_number`. Bila SIMRS mengirim order yang
+sama dua kali (mis. karena timeout lalu retry), bridge **tidak** membuat worklist ganda —
+order yang sudah ada dikembalikan dengan **HTTP `200`** dan `created: false`:
+
+```json
+{
+  "id": "5b16e282-d4e2-439e-9fab-07d6b9e90675",
+  "patient_name": "BUDI SANTOSO TN.",
+  "accession_number": "A260100001",
+  "created": false,
+  "duplicate": true
+}
+```
+
+Bila accession sama tetapi **No. RM berbeda**, bridge menolak dengan **`409`** (bukan menimpa data pasien lain):
+
+```json
+{
+  "error": "Konflik accession",
+  "code": "ACCESSION_CONFLICT",
+  "message": "AccessionNumber A260100001 sudah dipakai pasien lain (No. RM A000001)."
+}
+```
+
+Untuk mengubah order yang sudah ada, gunakan `PUT /worklists/{id}`.
 
 **Aturan nama (penting):** modalitas memotong `PatientName` pada karakter koma.
 Karena itu bridge menormalkan nama menjadi `NAMA GELAR` (tanpa koma):
@@ -314,7 +345,7 @@ Tanggal/jam order default = hari ini (waktu server Bridge).
 Validasi gagal (field wajib kosong) → `400`:
 
 ```json
-{ "error": "Validasi gagal", "message": "patient_name, patient_id, accession_number, dan procedure wajib diisi" }
+{ "error": "Validasi gagal", "code": "VALIDATION_FAILED", "message": "patient_name, patient_id, accession_number, dan procedure wajib diisi" }
 ```
 
 #### `GET /worklists`
@@ -354,8 +385,53 @@ Sama seperti elemen di atas. **404** bila tidak ada:
 ```json
 {
   "error": "Data tidak ditemukan",
-  "message": "Orthanc GET /worklists/PROBE9 -> HTTP 404",
+  "code": "NOT_FOUND",
+  "message": "Data yang diminta belum ada di PACS (order/study/gambar).",
   "orthanc_status": 404
+}
+```
+
+#### `GET /worklists/{acc}/status`
+
+Status order untuk ditampilkan ke petugas. Kuncinya **AccessionNumber**
+(bukan ID Orthanc). Tidak butuh polling gambar: status dihitung dari worklist,
+study, dan audit log.
+
+```json
+{
+  "accession_number": "A261105038",
+  "status": "completed",
+  "label": "Gambar sudah masuk",
+  "worklist": { "present": false, "id": null },
+  "studies": {
+    "count": 1,
+    "modalities": ["DX"],
+    "images": 1,
+    "ids": ["cdf3bb70-123baeec-0bde07e1-607b6f43-b1b795ba"]
+  },
+  "timeline": {
+    "created_at": "2026-11-19T11:40:12+07:00",
+    "deleted_at": "2026-11-19T11:41:02+07:00",
+    "last_event": { "event": "worklist.delete", "ts": "2026-11-19T11:41:02+07:00" }
+  },
+  "checked_at": "2026-11-19T11:41:05+07:00"
+}
+```
+
+| `status` | `label` | Arti |
+|---|---|---|
+| `sent` | Order terkirim ke alat | Entry worklist masih ada, study belum masuk |
+| `taken` | Ditarik / diproses alat | Entry worklist sudah hilang, study belum stabil masuk |
+| `completed` | Gambar sudah masuk | Study (dan gambar) sudah ada di PACS |
+| `cancelled` | Order dibatalkan | Entry dihapus lewat `DELETE /worklists/{id}` (tercatat di audit) |
+
+Accession tidak dikenal (tidak ada worklist, study, atau riwayat) → **404**:
+
+```json
+{
+  "error": "Data tidak ditemukan",
+  "code": "ORDER_NOT_FOUND",
+  "message": "Order dengan AccessionNumber A260100001 tidak ditemukan."
 }
 ```
 
@@ -692,6 +768,121 @@ curl -X POST "$BASE/users" -b cookies.txt -H "Content-Type: application/json" \
 
 ---
 
+### 4.6 Audit log
+
+#### `GET /audit` — **khusus sesi manager**
+
+Membaca `data/audit.log` (JSON Lines). Setiap request HTTP dicatat otomatis
+(metode, path, status, durasi, IP, kredensial) dan aksi penting dicatat sebagai event
+(`worklist.create`, `worklist.update`, `worklist.delete`, `settings.update`,
+`user.*`, `auth.login`, `auth.login_failed`, `auth.logout`, `api_key.view`).
+
+| Query | Arti |
+|---|---|
+| `limit` | jumlah entri terakhir (1–500, default 50) |
+| `event` | filter event, mis. `worklist.delete` |
+| `accession` | filter satu order |
+| `method`, `status`, `user`, `auth` | filter tambahan |
+
+```json
+{
+  "count": 2,
+  "filters": { "accession": "A261105038" },
+  "entries": [
+    {
+      "ts": "2026-11-19T11:40:12+07:00",
+      "auth": "api-key", "user": null, "role": "api-key", "ip": "10.4.0.12",
+      "event": "worklist.create", "accession": "A261105038",
+      "worklist_id": "0b0cb295-366c-405f-868c-3c23845e5966",
+      "patient_id": "A048919", "modality": "DX", "duplicate": false
+    },
+    {
+      "ts": "2026-11-19T11:40:12+07:00",
+      "auth": "api-key", "event": "request", "method": "POST",
+      "path": "/worklists", "status": 201, "duration_ms": 118,
+      "accession": "A261105038"
+    }
+  ]
+}
+```
+
+- API key & operator → **403** (audit hanya untuk manager).
+- File dirotasi otomatis ke `audit.log.1` saat melewati 5 MB.
+- Nilai API key **tidak pernah** ditulis ke log.
+
+```bash
+curl -b cookies.txt "$BASE/audit?limit=20&event=worklist.delete"
+curl -b cookies.txt "$BASE/audit?accession=A261105038"
+```
+
+---
+
+### 4.7 Callback (webhook) study baru
+
+SIMRS tidak perlu polling `GET /studies` terus-menerus. Isi **Callback URL** (dan **Callback key**)
+di Pengaturan; worker `tools/notify-studies.php` (cron tiap menit) memantau `/changes` Orthanc
+dan mengirim `POST` ke URL tersebut saat ada study stabil baru.
+
+**Aktifkan:**
+
+```bash
+# via API (sesi manager)
+curl -X PUT "$BASE/settings" -b cookies.txt -H "Content-Type: application/json" \
+  -d '{"callback_url":"https://simrs.local/api/pacs/callback","callback_key":"<CALLBACK_KEY>"}'
+```
+
+`callback_key` dikembalikan **ter-mask** di `GET /settings` (`has_callback_key`, `callback_key: "abcd1234...wxyz"`).
+
+**Request dari bridge ke SIMRS:**
+
+```http
+POST /api/pacs/callback HTTP/1.1
+Content-Type: application/json
+X-Bridge-Event: study.received
+X-Bridge-Key: <CALLBACK_KEY>
+X-Bridge-Signature: sha256=9f2c...e1
+```
+
+```json
+{
+  "event": "study.received",
+  "sent_at": "2026-11-19T11:40:57+07:00",
+  "accession_number": "A261105038",
+  "patient_id": "A048919",
+  "patient_name": "TARYA BIN WARDI TN.",
+  "study_id": "9060f064-48cfbfa5-63c41030-bf2967f1-e70f790e",
+  "study_instance_uid": "1.2.840.114257.1.1.11232.191827.7270194.100",
+  "study_date": "20261119",
+  "modalities": ["DX"],
+  "images": 1,
+  "status": "completed"
+}
+```
+
+**Verifikasi tanda tangan (wajib):**
+
+```php
+$raw = file_get_contents('php://input');
+$expect = 'sha256=' . hash_hmac('sha256', $raw, getenv('PACS_CALLBACK_KEY'));
+if (!hash_equals($expect, $_SERVER['HTTP_X_BRIDGE_SIGNATURE'] ?? '')) {
+    http_response_code(401);
+    exit;
+}
+$event = json_decode($raw, true);   // proses order/gambar
+http_response_code(200);            // wajib 2xx agar tidak dikirim ulang
+```
+
+Catatan operasional:
+
+- Bridge mencoba **3×** (backoff 0,5 detik; 1,5 detik). Bila tetap gagal, posisi diproses ulang
+  pada jadwal berikutnya (at-least-once) — SIMRS **wajib idempotent** terhadap `study_id`.
+- Posisi terakhir disimpan di `data/notify-state.json`; log pengiriman di `data/callback.log`.
+- Cron (di server): lihat `deploy/cron-pacs-notify` — `*/1 * * * *`.
+- Uji manual: `php tools/notify-studies.php --latest` / `--dry-run`.
+- Callback tidak aktif bila `callback_url` kosong.
+
+---
+
 ## 5. Contoh koneksi
 
 ### 5.1 curl
@@ -869,27 +1060,47 @@ Dua pilihan aman:
 
 | HTTP | Arti | Contoh penyebab |
 |---|---|---|
-| `200` | OK | request berhasil |
-| `201` | Created | `POST /worklists` |
+| `200` | OK | request berhasil; `POST /worklists` saat order sudah ada (**idempotent**) |
+| `201` | Created | `POST /worklists` untuk order baru |
 | `204` | No Content | preflight `OPTIONS` |
 | `400` | Validasi gagal | field wajib kosong, parameter tidak dikenal |
 | `401` | Unauthorized | tanpa API key & tanpa sesi (termasuk key yang ditaruh di query/body); password salah saat login |
-| `403` | Forbidden | key dipakai untuk endpoint administratif (`/settings/api-key`, `PUT /settings`, `POST /settings/password`, `/users*`) atau operator membuka Pengaturan |
-| `404` | Tidak ditemukan | worklist/study tidak ada, endpoint salah |
+| `403` | Forbidden | key dipakai untuk endpoint administratif (`/settings/api-key`, `PUT /settings`, `POST /settings/password`, `/users*`, `/audit`) atau operator membuka Pengaturan |
+| `404` | Tidak ditemukan | study/order belum ada (`code: STUDY_NOT_FOUND` / `ORDER_NOT_FOUND`), gambar belum tersedia (`IMAGE_NOT_FOUND`), endpoint salah (`ENDPOINT_NOT_FOUND`) |
 | `405` | Method tidak didukung | `PATCH /worklists` |
+| `409` | Konflik accession | `POST /worklists` dengan `accession_number` milik **pasien lain** (`code: ACCESSION_CONFLICT`) |
 | `500` | Internal error | bug/IO (mis. folder `data/` tidak writable) |
-| `502` | Orthanc tidak bisa dipakai | Orthanc mati, timeout, error 5xx dari Orthanc |
+| `502` | Orthanc tidak bisa dipakai | Orthanc mati, timeout, error 5xx dari Orthanc (`code: ORTHANC_ERROR`) |
+| `503` | Fitur tidak tersedia | watermark diminta tetapi GD/FreeType tidak ada (`WATERMARK_UNAVAILABLE`) |
 
-Format error selalu konsisten:
+Setiap error memuat `error` (label singkat), **`code`** (machine-readable), dan `message`
+(kalimat untuk petugas):
 
 ```json
 {
   "error": "Orthanc error",
+  "code": "ORTHANC_ERROR",
   "message": "Koneksi ke Orthanc gagal (http://10.4.0.10:8042/tools/find): Connection timed out after 10011 milliseconds",
   "orthanc_status": 0,
   "orthanc_body": ""
 }
 ```
+
+Daftar `code` yang dipakai SIMRS:
+
+| `code` | HTTP | Kapan |
+|---|---|---|
+| `UNAUTHORIZED` / `INVALID_CREDENTIALS` | 401 | key/sesi tidak valid, login salah |
+| `FORBIDDEN` | 403 | endpoint administratif dengan API key/operator |
+| `VALIDATION_FAILED` | 400 | field wajib kosong / parameter salah |
+| `ACCESSION_CONFLICT` | 409 | accession sudah dipakai pasien lain |
+| `ORDER_NOT_FOUND` | 404 | accession belum pernah dibuat / sudah dihapus tanpa jejak |
+| `STUDY_NOT_FOUND` | 404 | study belum masuk ke PACS |
+| `IMAGE_NOT_FOUND` | 404 | study ada, gambar belum tersedia |
+| `NOT_FOUND` | 404 | resource Orthanc tidak ada (fallback) |
+| `METHOD_NOT_ALLOWED` | 405 | metode HTTP tidak didukung |
+| `ORTHANC_ERROR` | 502 | Orthanc error/timeout |
+| `WATERMARK_UNAVAILABLE` | 503 | GD/FreeType tidak aktif |
 
 ---
 
@@ -922,15 +1133,24 @@ Format error selalu konsisten:
 8. **Jangan menyimpan API key di source code SIMRS** — pakai `.env` / secret manager.
 9. **Matikan API key** dengan mengosongkan field di Pengaturan bila ingin kembali ke
    mode sesi login saja (semua request program akan `401`).
+10. **`POST /worklists` idempotent per AccessionNumber.** Kirim ulang saat timeout; jangan
+    membuat accession baru untuk order yang sama, karena itu akan membuat worklist ganda.
+11. **Callback bersifat at-least-once.** SIMRS wajib mengabaikan `study_id` yang sudah pernah
+    diproses (idempotent di sisi penerima).
+12. **Audit log** (`data/audit.log`) tumbuh ±1 baris per request; rotasi otomatis pada 5 MB.
+    Endpoint `GET /audit` membaca 512 KB terakhir, jadi untuk audit jangka panjang
+    arsipkan file lama ke penyimpanan terpisah.
 
 ---
 
 ## 8. Uji cepat (self-test)
 
 ```powershell
-php tools/selftest.php          # 6 uji end-to-end (create worklist → render → hapus)
-php tools/test-api-key.php      # 8 uji API key (401 tanpa key, 200 dengan key, 403 untuk settings)
-php tools/test-ci-integration.php
+php tools/selftest.php          # 8 uji end-to-end (create worklist → render → hapus)
+php tools/test-api-key.php http://127.0.0.1:8081 <API_KEY>       # 8 uji API key
+php tools/test-order-flow.php http://127.0.0.1:8081 <API_KEY>    # 8 uji idempotensi/status/409/audit
+php tools/test-ci-integration.php                                # 9 uji (mode SDK)
+php tools/notify-studies.php --dry-run                           # pratinjau callback
 ```
 
 Jalankan API dev:

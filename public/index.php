@@ -32,16 +32,40 @@ declare(strict_types=1);
 
 require_once dirname(__DIR__) . '/src/autoload.php';
 
+use Simrs\Pacs\AuditLogger;
 use Simrs\Pacs\Auth;
 use Simrs\Pacs\Bridge;
 use Simrs\Pacs\OrthancException;
 use Simrs\Pacs\Settings;
 use Simrs\Pacs\WatermarkService;
+use Simrs\Pacs\WorklistConflictException;
+
+AuditLogger::boot();
 
 header('X-Content-Type-Options: nosniff');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Headers: Content-Type, X-API-Key');
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
+
+$GLOBALS['__pacs_audit'] = [
+    'method'    => strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET'),
+    'path'      => parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/',
+    'query'     => (string) ($_SERVER['QUERY_STRING'] ?? ''),
+    'accession' => null,
+    'started'   => microtime(true),
+];
+
+register_shutdown_function(static function (): void {
+    $ctx = $GLOBALS['__pacs_audit'] ?? [];
+    AuditLogger::request(
+        (string) ($ctx['method'] ?? '?'),
+        (string) ($ctx['path'] ?? '?'),
+        (int) http_response_code(),
+        isset($ctx['accession']) ? (string) $ctx['accession'] : null,
+        isset($ctx['started']) ? (float) $ctx['started'] : null,
+        (string) ($ctx['query'] ?? '')
+    );
+});
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {
     http_response_code(204);
@@ -57,6 +81,43 @@ function respondJson($data, int $status = 200): never
     header('Content-Type: application/json; charset=utf-8');
     echo json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
     exit;
+}
+
+/**
+ * Error konsisten: `error` (label singkat, kompatibel), `code` (machine-readable),
+ * `message` (kalimat untuk petugas).
+ *
+ * @param array<string, mixed> $extra
+ */
+function respondError(int $status, string $code, string $message, array $extra = []): never
+{
+    $labels = [
+        400 => 'Validasi gagal',
+        401 => 'Unauthorized',
+        403 => 'Forbidden',
+        404 => 'Data tidak ditemukan',
+        405 => 'Method tidak didukung',
+        409 => 'Konflik accession',
+        500 => 'Internal error',
+        502 => 'Orthanc error',
+        503 => 'Fitur tidak tersedia',
+    ];
+
+    respondJson([
+        'error'   => $labels[$status] ?? 'Error',
+        'code'    => $code,
+        'message' => $message,
+    ] + $extra, $status);
+}
+
+/**
+ * Tandai accession pada access log (dipakai route yang menyentuh order/study).
+ */
+function auditAccession(string $value): void
+{
+    if ($value !== '') {
+        $GLOBALS['__pacs_audit']['accession'] = $value;
+    }
 }
 
 function respondBinary(string $content, string $mime, string $filename): never
@@ -95,7 +156,7 @@ function readJsonBody(): array
 
     $data = json_decode($raw, true);
     if (!is_array($data)) {
-        respondJson(['error' => 'Body harus JSON object'], 400);
+        respondError(400, 'VALIDATION_FAILED', 'Body request harus berupa JSON object.');
     }
 
     return $data;
@@ -128,22 +189,32 @@ try {
     /** Hanya sesi login dengan peran manager yang boleh mengubah konfigurasi & user. */
     $isAdmin = $sessionValid && $auth->isAdmin();
 
+    AuditLogger::setAuth(
+        $sessionValid ? 'session' : ($apiKeyValid ? 'api-key' : 'none'),
+        $sessionValid ? $auth->user() : null,
+        $sessionValid ? $auth->role() : ($apiKeyValid ? 'api-key' : null)
+    );
+
     if ($path === '/login' && $method === 'POST') {
         $body = readJsonBody();
         $username = trim((string) ($body['username'] ?? ''));
         $password = (string) ($body['password'] ?? '');
 
         if ($auth->login($username, $password)) {
+            AuditLogger::setAuth('session', $auth->user(), $auth->role());
+            AuditLogger::event('auth.login', ['username' => $auth->user()]);
             respondJson([
                 'authenticated' => true,
                 'user'          => $auth->user(),
                 'role'          => $auth->role(),
             ]);
         }
-        respondJson(['error' => 'Username atau password salah'], 401);
+        AuditLogger::event('auth.login_failed', ['username' => $username]);
+        respondError(401, 'INVALID_CREDENTIALS', 'Username atau password salah.');
     }
 
     if ($path === '/logout') {
+        AuditLogger::event('auth.logout', ['username' => $auth->user()]);
         $auth->logout();
         respondJson(['authenticated' => false]);
     }
@@ -168,22 +239,46 @@ try {
             readfile($dashboard);
             exit;
         }
-        respondJson(['error' => 'dashboard.html tidak ditemukan'], 500);
+        respondError(500, 'DASHBOARD_MISSING', 'File dashboard.html tidak ditemukan di server.');
     }
 
     if (!$authenticated) {
+        respondError(401, 'UNAUTHORIZED', 'Silakan login di dashboard atau kirim header X-API-Key.');
+    }
+
+    if ($path === '/audit' && $method === 'GET') {
+        if (!$isAdmin) {
+            respondError(403, 'FORBIDDEN', 'Riwayat audit hanya bisa dibaca dengan sesi login manager.');
+        }
+
+        $limit = max(1, min(500, (int) ($query['limit'] ?? 50)));
+        $filters = [];
+        foreach (['event', 'accession', 'method', 'status', 'user', 'auth'] as $key) {
+            $value = trim((string) ($query[$key] ?? ''));
+            if ($value !== '') {
+                $filters[$key] = $value;
+            }
+        }
+
+        $rows = array_reverse(AuditLogger::tail($limit, $filters));
         respondJson([
-            'error'   => 'Unauthorized',
-            'message' => 'Silakan login di dashboard',
-        ], 401);
+            'count'   => count($rows),
+            'filters' => $filters,
+            'entries' => $rows,
+        ]);
     }
 
     if ($path === '/settings') {
         if ($method === 'GET') {
             $payload = $settings->publicValues();
             if (!$isAdmin) {
-                // Operator cukup butuh daftar alat & filter; detail API key bukan wewenangnya.
-                unset($payload['api_key'], $payload['has_api_key']);
+                // Operator cukup butuh daftar alat & filter; rahasia bukan wewenangnya.
+                unset(
+                    $payload['api_key'],
+                    $payload['has_api_key'],
+                    $payload['callback_key'],
+                    $payload['has_callback_key']
+                );
             }
             respondJson([
                 'settings'  => $payload,
@@ -200,26 +295,29 @@ try {
         }
         if ($method === 'PUT') {
             if (!$sessionValid) {
-                respondJson(['error' => 'Perubahan pengaturan harus melalui sesi login'], 403);
+                respondError(403, 'FORBIDDEN', 'Perubahan pengaturan harus melalui sesi login manager.');
             }
             if (!$isAdmin) {
-                respondJson(['error' => 'Hanya akun manager yang boleh mengubah pengaturan'], 403);
+                respondError(403, 'FORBIDDEN', 'Hanya akun manager yang boleh mengubah pengaturan.');
             }
-            $clean = $settings->validateBridgeSettings(readJsonBody());
+            $body = readJsonBody();
+            $clean = $settings->validateBridgeSettings($body);
             $settings->save($clean);
+            AuditLogger::event('settings.update', ['fields' => array_keys($clean)]);
             respondJson(['saved' => true, 'settings' => $settings->publicValues()]);
         }
-        respondJson(['error' => 'Method tidak didukung'], 405);
+        respondError(405, 'METHOD_NOT_ALLOWED', 'Gunakan GET atau PUT untuk /settings.');
     }
 
     if ($path === '/settings/api-key' && $method === 'GET') {
         if (!$sessionValid) {
-            respondJson(['error' => 'API key hanya bisa dilihat lewat sesi login'], 403);
+            respondError(403, 'FORBIDDEN', 'API key hanya bisa dilihat lewat sesi login manager.');
         }
         if (!$isAdmin) {
-            respondJson(['error' => 'API key hanya bisa dilihat akun manager'], 403);
+            respondError(403, 'FORBIDDEN', 'API key hanya bisa dilihat akun manager.');
         }
         $full = (string) ($settings->all()['api_key'] ?? '');
+        AuditLogger::event('api_key.view');
         respondJson([
             'has_api_key' => $full !== '',
             'api_key'     => $full,
@@ -228,26 +326,27 @@ try {
 
     if ($path === '/settings/password' && $method === 'POST') {
         if (!$sessionValid) {
-            respondJson(['error' => 'Harus login'], 403);
+            respondError(403, 'FORBIDDEN', 'Ganti password harus melalui sesi login.');
         }
         $body = readJsonBody();
         $current = (string) ($body['current_password'] ?? '');
         $new = (string) ($body['new_password'] ?? '');
 
         if (!$settings->verifyCredentials((string) $auth->user(), $current)) {
-            respondJson(['error' => 'Password lama salah'], 400);
+            respondError(400, 'INVALID_PASSWORD', 'Password lama salah.');
         }
         if (strlen($new) < 4) {
-            respondJson(['error' => 'Password baru minimal 4 karakter'], 400);
+            respondError(400, 'VALIDATION_FAILED', 'Password baru minimal 4 karakter.');
         }
 
         $settings->setUserPassword((string) $auth->user(), $new);
+        AuditLogger::event('user.password_change', ['username' => $auth->user()]);
         respondJson(['saved' => true]);
     }
 
     if ($path === '/users') {
         if (!$isAdmin) {
-            respondJson(['error' => 'Hanya akun manager yang boleh mengelola user'], 403);
+            respondError(403, 'FORBIDDEN', 'Hanya akun manager yang boleh mengelola user.');
         }
         if ($method === 'GET') {
             $me = (string) $auth->user();
@@ -269,14 +368,18 @@ try {
                 (string) ($body['password'] ?? ''),
                 (string) ($body['role'] ?? Settings::ROLE_OPERATOR)
             );
+            AuditLogger::event('user.create', [
+                'username' => (string) ($body['username'] ?? ''),
+                'role'     => (string) ($body['role'] ?? Settings::ROLE_OPERATOR),
+            ]);
             respondJson(['created' => true], 201);
         }
-        respondJson(['error' => 'Method tidak didukung'], 405);
+        respondError(405, 'METHOD_NOT_ALLOWED', 'Gunakan GET atau POST untuk /users.');
     }
 
     if (preg_match('#^/users/([A-Za-z0-9._\-]{1,32})$#', $path, $m)) {
         if (!$isAdmin) {
-            respondJson(['error' => 'Hanya akun manager yang boleh mengelola user'], 403);
+            respondError(403, 'FORBIDDEN', 'Hanya akun manager yang boleh mengelola user.');
         }
         $target = $m[1];
         if ($method === 'PUT') {
@@ -286,16 +389,22 @@ try {
                 array_key_exists('role', $body) ? (string) $body['role'] : null,
                 array_key_exists('password', $body) ? (string) $body['password'] : null
             );
+            AuditLogger::event('user.update', [
+                'username' => $target,
+                'role'     => $body['role'] ?? null,
+                'password_reset' => array_key_exists('password', $body) && (string) $body['password'] !== '',
+            ]);
             respondJson(['saved' => true]);
         }
         if ($method === 'DELETE') {
             if (strcasecmp($target, (string) $auth->user()) === 0) {
-                respondJson(['error' => 'Tidak bisa menghapus akun yang sedang dipakai login'], 400);
+                respondError(400, 'VALIDATION_FAILED', 'Tidak bisa menghapus akun yang sedang dipakai login.');
             }
             $settings->deleteUser($target);
+            AuditLogger::event('user.delete', ['username' => $target]);
             respondJson(['deleted' => $target]);
         }
-        respondJson(['error' => 'Method tidak didukung'], 405);
+        respondError(405, 'METHOD_NOT_ALLOWED', 'Gunakan PUT atau DELETE untuk /users/{username}.');
     }
 
     if ($path === '/health') {
@@ -311,10 +420,103 @@ try {
             respondJson($bridge->worklist()->all());
         }
         if ($method === 'POST') {
-            $result = $bridge->worklist()->create(readJsonBody());
-            respondJson($result, 201);
+            $body = readJsonBody();
+            $accession = trim((string) ($body['accession_number'] ?? ''));
+            auditAccession($accession);
+
+            $result = $bridge->worklist()->create($body);
+            AuditLogger::event('worklist.create', [
+                'accession'   => $result['accession_number'],
+                'worklist_id' => $result['id'],
+                'patient_id'  => (string) ($body['patient_id'] ?? ''),
+                'modality'    => (string) ($body['modality'] ?? ''),
+                'duplicate'   => !$result['created'],
+            ]);
+
+            respondJson($result, $result['created'] ? 201 : 200);
         }
-        respondJson(['error' => 'Method tidak didukung'], 405);
+        respondError(405, 'METHOD_NOT_ALLOWED', 'Gunakan GET atau POST untuk /worklists.');
+    }
+
+    if (preg_match('#^/worklists/([A-Za-z0-9\-.]+)/status$#', $path, $m)) {
+        $key = $m[1];
+        auditAccession($key);
+
+        $worklistSvc = $bridge->worklist();
+        $studySvc = $bridge->studies();
+        $entry = $worklistSvc->findByAccession($key);
+        $studies = $studySvc->attachModalities($studySvc->findByAccession($key));
+
+        $createdAt = null;
+        $deletedAt = null;
+        $lastEvent = null;
+        foreach (AuditLogger::history($key, 100) as $row) {
+            $event = (string) ($row['event'] ?? '');
+            if ($event === 'worklist.create' && $createdAt === null) {
+                $createdAt = $row['ts'] ?? null;
+            }
+            if ($event === 'worklist.delete') {
+                $deletedAt = $row['ts'] ?? null;
+            }
+            if ($event !== '') {
+                $lastEvent = ['event' => $event, 'ts' => $row['ts'] ?? null];
+            }
+        }
+
+        $images = 0;
+        $modalities = [];
+        foreach ($studies as $study) {
+            $modality = strtoupper(trim((string) ($study['MainDicomTags']['Modality'] ?? '')));
+            if ($modality !== '') {
+                $modalities[] = $modality;
+            }
+            try {
+                $images += count($studySvc->instances((string) ($study['ID'] ?? '')));
+            } catch (\Throwable $e) {
+                // hitung gambar bersifat informatif saja
+            }
+        }
+
+        if ($studies !== []) {
+            $status = 'completed';
+            $label = 'Gambar sudah masuk';
+        } elseif ($entry !== null) {
+            $status = 'sent';
+            $label = 'Order terkirim ke alat';
+        } elseif ($deletedAt !== null) {
+            $status = 'cancelled';
+            $label = 'Order dibatalkan';
+        } elseif ($createdAt !== null) {
+            $status = 'taken';
+            $label = 'Ditarik / diproses alat';
+        } else {
+            respondError(404, 'ORDER_NOT_FOUND', 'Order dengan AccessionNumber ' . $key . ' tidak ditemukan.');
+        }
+
+        respondJson([
+            'accession_number' => $key,
+            'status'           => $status,
+            'label'            => $label,
+            'worklist'         => [
+                'present' => $entry !== null,
+                'id'      => $entry !== null ? (string) ($entry['ID'] ?? '') : null,
+            ],
+            'studies' => [
+                'count'     => count($studies),
+                'modalities'=> array_values(array_unique($modalities)),
+                'images'    => $images,
+                'ids'       => array_values(array_map(
+                    static fn (array $study): string => (string) ($study['ID'] ?? ''),
+                    $studies
+                )),
+            ],
+            'timeline'   => [
+                'created_at' => $createdAt,
+                'deleted_at' => $deletedAt,
+                'last_event' => $lastEvent,
+            ],
+            'checked_at' => date('c'),
+        ]);
     }
 
     if (preg_match('#^/worklists/([A-Za-z0-9\-]+)$#', $path, $m)) {
@@ -323,13 +525,31 @@ try {
             respondJson($bridge->worklist()->get($id));
         }
         if ($method === 'PUT') {
-            respondJson($bridge->worklist()->update($id, readJsonBody()));
+            $body = readJsonBody();
+            $accession = trim((string) ($body['accession_number'] ?? ''));
+            auditAccession($accession);
+            $result = $bridge->worklist()->update($id, $body);
+            AuditLogger::event('worklist.update', [
+                'accession'   => $accession !== '' ? $accession : $result['accession_number'],
+                'worklist_id' => $id,
+            ]);
+            respondJson($result);
         }
         if ($method === 'DELETE') {
+            $accession = '';
+            try {
+                $entry = $bridge->worklist()->get($id);
+                $accession = (string) ($entry['Tags']['AccessionNumber'] ?? '');
+            } catch (\Throwable $e) {
+                // entry mungkin sudah hilang; tetap lanjut hapus
+            }
+            auditAccession($accession);
+
             $bridge->worklist()->delete($id);
+            AuditLogger::event('worklist.delete', ['accession' => $accession, 'worklist_id' => $id]);
             respondJson(['deleted' => $id]);
         }
-        respondJson(['error' => 'Method tidak didukung'], 405);
+        respondError(405, 'METHOD_NOT_ALLOWED', 'Gunakan GET, PUT, atau DELETE untuk /worklists/{id}.');
     }
 
     if ($path === '/studies/recent') {
@@ -342,7 +562,7 @@ try {
         }
 
         if ($dateParam !== 'all' && !preg_match('/^\d{8}$/', $dateParam)) {
-            respondJson(['error' => 'Parameter date harus YYYYMMDD atau "all"'], 400);
+            respondError(400, 'VALIDATION_FAILED', 'Parameter date harus YYYYMMDD atau "all".');
         }
 
         $modalityParam = strtoupper(trim((string) ($query['modality'] ?? '')));
@@ -350,7 +570,7 @@ try {
             $modalityParam = '';
         }
         if ($modalityParam !== '' && !preg_match('/^[A-Z0-9]{1,16}$/', $modalityParam)) {
-            respondJson(['error' => 'Parameter modality harus kode DICOM, mis. US atau DX'], 400);
+            respondError(400, 'VALIDATION_FAILED', 'Parameter modality harus kode DICOM, mis. US atau DX.');
         }
 
         $date = $dateParam === 'all' ? null : $dateParam;
@@ -389,6 +609,7 @@ try {
         $accession = trim((string) ($query['accession'] ?? ''));
         $patientId = trim((string) ($query['patient_id'] ?? ''));
         $name = trim((string) ($query['name'] ?? ($query['patient_name'] ?? '')));
+        auditAccession($accession);
 
         if ($accession !== '') {
             $studySvc = $bridge->studies();
@@ -402,64 +623,72 @@ try {
             $studySvc = $bridge->studies();
             respondJson($studySvc->attachModalities($studySvc->findByPatientName($name)));
         }
-        respondJson(['error' => 'Parameter accession, patient_id, atau name wajib'], 400);
+        respondError(400, 'VALIDATION_FAILED', 'Parameter accession, patient_id, atau name wajib diisi.');
     }
 
     if (preg_match('#^/studies/([A-Za-z0-9\-.]+)/(jpg|png)$#', $path, $m)) {
         $key = $m[1];
         $format = $m[2];
+        auditAccession($key);
         $quality = max(1, min(100, (int) ($query['quality'] ?? 90)));
         $width = isset($query['width']) ? max(64, (int) $query['width']) : null;
         $watermark = $format === 'jpg' && isTruthy($query['watermark'] ?? null);
 
         if ($watermark && !WatermarkService::available()) {
-            respondJson(['error' => 'Watermark tidak tersedia (ekstensi GD/FreeType belum aktif)'], 503);
+            respondError(503, 'WATERMARK_UNAVAILABLE', 'Watermark belum aktif di server (ekstensi GD/FreeType belum tersedia).');
         }
 
         $image = $bridge->studies()->imageByKey($key, $format, $quality, $width, $watermark);
         if ($image === null) {
-            respondJson(['error' => 'Study/gambar tidak ditemukan untuk ' . $key], 404);
+            respondError(
+                404,
+                'IMAGE_NOT_FOUND',
+                'Gambar untuk study ' . $key . ' belum tersedia. Pastikan order sudah dikerjakan alat, lalu coba lagi.'
+            );
         }
 
         respondBinary($image['content'], $image['mime'], $image['filename']);
     }
 
     if (preg_match('#^/studies/([A-Za-z0-9\-.]+)/images$#', $path, $m)) {
+        auditAccession($m[1]);
         $study = $bridge->studies()->findOneByKey($m[1]);
         if ($study === null) {
-            respondJson(['error' => 'Study tidak ditemukan untuk ' . $m[1]], 404);
+            respondError(404, 'STUDY_NOT_FOUND', 'Study ' . $m[1] . ' belum masuk ke PACS. Coba lagi beberapa saat.');
         }
         $list = $bridge->studies()->imageList((string) ($study['ID'] ?? ''));
         if ($list === []) {
-            respondJson(['error' => 'Study belum memiliki gambar'], 404);
+            respondError(404, 'IMAGE_NOT_FOUND', 'Study ' . $m[1] . ' ditemukan, tetapi belum memiliki gambar.');
         }
         respondJson($list);
     }
 
     if (preg_match('#^/studies/([A-Za-z0-9\-.]+)/zip-jpg$#', $path, $m)) {
+        auditAccession($m[1]);
         $quality = max(1, min(100, (int) ($query['quality'] ?? 90)));
         $watermark = !array_key_exists('watermark', $query) || isTruthy($query['watermark']);
 
         if ($watermark && !WatermarkService::available()) {
-            respondJson(['error' => 'Watermark tidak tersedia (ekstensi GD/FreeType belum aktif)'], 503);
+            respondError(503, 'WATERMARK_UNAVAILABLE', 'Watermark belum aktif di server (ekstensi GD/FreeType belum tersedia).');
         }
 
         try {
             $archive = $bridge->studies()->zipJpegByKey($m[1], $quality, $watermark);
         } catch (InvalidArgumentException $e) {
-            respondJson(['error' => $e->getMessage()], 404);
+            respondError(404, 'STUDY_NOT_FOUND', $e->getMessage());
         }
         if ($archive === null) {
-            respondJson(['error' => 'Tidak ada gambar untuk ' . $m[1]], 404);
+            respondError(404, 'IMAGE_NOT_FOUND', 'Study ' . $m[1] . ' belum memiliki gambar untuk diunduh.');
         }
 
         respondBinary($archive['content'], 'application/zip', $archive['filename']);
     }
 
     if (preg_match('#^/studies/([A-Za-z0-9\-.]+)/zip$#', $path, $m)) {
+        auditAccession($m[1]);
         $study = $bridge->studies()->findOneByKey($m[1]);
         if ($study === null) {
-            respondJson(['error' => 'Study tidak ditemukan untuk ' . $m[1]], 404);
+            respondError(404, 'STUDY_NOT_FOUND', 'Study ' . $m[1] . ' belum masuk ke PACS. Coba lagi beberapa saat.');
         }
         $studyId = (string) ($study['ID'] ?? '');
         $accession = (string) ($study['MainDicomTags']['AccessionNumber'] ?? '');
@@ -484,19 +713,25 @@ try {
         );
     }
 
-    respondJson(['error' => 'Endpoint tidak ditemukan', 'path' => $path], 404);
+    respondError(404, 'ENDPOINT_NOT_FOUND', 'Endpoint ' . $path . ' tidak dikenal. Lihat API.md untuk daftar endpoint.');
+} catch (WorklistConflictException $e) {
+    respondError(409, $e->errorCode, $e->getMessage());
 } catch (OrthancException $e) {
     respondJson([
-        'error'         => $e->statusCode === 404 ? 'Data tidak ditemukan' : 'Orthanc error',
-        'message'       => $e->getMessage(),
-        'orthanc_status'=> $e->statusCode,
-        'orthanc_body'  => $e->responseBody,
+        'error'          => $e->statusCode === 404 ? 'Data tidak ditemukan' : 'Orthanc error',
+        'code'           => $e->statusCode === 404 ? 'NOT_FOUND' : 'ORTHANC_ERROR',
+        'message'        => $e->statusCode === 404
+            ? 'Data yang diminta belum ada di PACS (order/study/gambar).'
+            : $e->getMessage(),
+        'orthanc_status' => $e->statusCode,
+        'orthanc_body'   => $e->responseBody,
     ], $e->statusCode === 404 ? 404 : 502);
 } catch (InvalidArgumentException $e) {
-    respondJson(['error' => 'Validasi gagal', 'message' => $e->getMessage()], 400);
+    respondError(400, 'VALIDATION_FAILED', $e->getMessage());
 } catch (Throwable $e) {
     respondJson([
         'error'   => 'Internal error',
+        'code'    => 'INTERNAL_ERROR',
         'message' => $e->getMessage(),
         'type'    => get_class($e),
     ], 500);

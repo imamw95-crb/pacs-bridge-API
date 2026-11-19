@@ -1,0 +1,8 @@
+# Callback study baru ke SIMRS (bridge → SIMRS), dijalankan tiap menit.
+# Pasang di /etc/cron.d/pacs-notify. Butuh callback_url & callback_key di Pengaturan.
+#
+# Log: /var/log/pacs-notify.log  (ringkasan) dan /opt/pacs-bridge/data/callback.log (per pengiriman)
+SHELL=/bin/sh
+PATH=/usr/local/bin:/usr/bin:/bin
+
+* * * * * pacs /usr/bin/php /opt/pacs-bridge/tools/notify-studies.php --quiet >> /var/log/pacs-notify.log 2>&1

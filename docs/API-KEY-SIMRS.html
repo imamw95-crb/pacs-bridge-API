@@ -68,10 +68,11 @@
   <h1>API Key Bridge SIMRS ↔ Orthanc PACS</h1>
   <p class="lead">
     Panduan untuk tim SIMRS: cara memperoleh API key, cara mengirimkannya, endpoint mana yang
-    memerlukan key, contoh kode siap pakai (PHP / CodeIgniter / Python), serta penanganan error.
+    memerlukan key, contoh kode siap pakai (PHP / CodeIgniter / Python), status order,
+    callback study baru, audit panggilan, serta penanganan error.
   </p>
   <table class="meta">
-    <tr><th>Versi dokumen</th><td>1.0 — 19 November 2026</td></tr>
+    <tr><th>Versi dokumen</th><td>1.1 — 19 November 2026</td></tr>
     <tr><th>Lingkup</th><td>Bridge API (<code>public/index.php</code>) — bukan REST Orthanc langsung</td></tr>
     <tr><th>Base URL produksi</th><td class="mono">http://10.4.0.10/</td></tr>
     <tr><th>Base URL dev lokal</th><td class="mono">http://127.0.0.1:8081/</td></tr>
@@ -216,6 +217,7 @@ curl_close($ch);</code></pre>
     <tr><td>GET</td><td class="path">/studies/{acc}/zip-jpg?quality=</td><td>ZIP berisi JPG ber-watermark (folder = No. RM)</td></tr>
     <tr><td>GET</td><td class="path">/instances/{id}/jpg?quality=</td><td>render 1 instance sebagai JPEG</td></tr>
     <tr><td>GET</td><td class="path">/instances/{id}/file</td><td>unduh 1 file DICOM</td></tr>
+    <tr><td>GET</td><td class="path">/worklists/{acc}/status</td><td>status order: sent / taken / completed / cancelled</td></tr>
     <tr><td>GET</td><td class="path">/settings</td><td>baca konfigurasi aktif — <b>tanpa</b> field <code>api_key</code> / <code>has_api_key</code></td></tr>
   </tbody>
 </table>
@@ -231,6 +233,7 @@ kecuali ganti password sendiri).</p>
     <tr><td>POST</td><td class="path">/settings/password</td><td><code>Harus login</code></td></tr>
     <tr><td>GET / POST</td><td class="path">/users</td><td><code>Hanya akun manager yang boleh mengelola user</code></td></tr>
     <tr><td>PUT / DELETE</td><td class="path">/users/{username}</td><td><code>Hanya akun manager yang boleh mengelola user</code></td></tr>
+    <tr><td>GET</td><td class="path">/audit</td><td><code>Riwayat audit hanya bisa dibaca dengan sesi login manager</code></td></tr>
   </tbody>
 </table>
 
@@ -252,6 +255,7 @@ kecuali ganti password sendiri).</p>
     <tr><td><code>PUT /settings</code> (ubah IP/port/AET)</td><td class="c tag-no">✘ 403</td><td class="c">✔</td><td class="c tag-no">✘ 403</td></tr>
     <tr><td><code>POST /settings/password</code> (akun sendiri)</td><td class="c tag-no">✘ 403</td><td class="c">✔</td><td class="c">✔</td></tr>
     <tr><td><code>/users*</code> (kelola user dashboard)</td><td class="c tag-no">✘ 403</td><td class="c">✔</td><td class="c tag-no">✘ 403</td></tr>
+    <tr><td><code>GET /audit</code> (riwayat audit)</td><td class="c tag-no">✘ 403</td><td class="c">✔</td><td class="c tag-no">✘ 403</td></tr>
     <tr><td><code>POST /login</code>, <code>POST /logout</code>, <code>GET /me</code></td><td class="c">publik</td><td class="c">publik</td><td class="c">publik</td></tr>
   </tbody>
 </table>
@@ -347,6 +351,77 @@ open("hasil.jpg", "wb").write(img.content)</code></pre>
   <li>Jangan menulis key ke log, pesan error, atau tampilan halaman.</li>
 </ul>
 
+<h3>5.6 Idempotensi &amp; status order</h3>
+<pre><code>// Aman dikirim ulang saat timeout — kuncinya accession_number
+$order = [
+    'patient_name'     =&gt; 'TARYA BIN WARDI',
+    'title'            =&gt; 'Tn.',
+    'patient_id'       =&gt; 'A048919',
+    'accession_number' =&gt; 'A261105038',
+    'procedure'        =&gt; 'THORAX PA',
+];
+
+$first = $api-&gt;createWorklist($order);   // 201, created = true
+$again = $api-&gt;createWorklist($order);   // 200, created = false, id sama
+
+// Accession sama tetapi No. RM berbeda -&gt; HTTP 409 ACCESSION_CONFLICT
+// Status untuk ditampilkan ke petugas:
+$st = $api-&gt;orderStatus('A261105038');
+// status: sent | taken | completed | cancelled (+ label, studies, timeline)</code></pre>
+<table>
+  <thead><tr><th style="width:22%"><code>status</code></th><th>Arti untuk petugas</th></tr></thead>
+  <tbody>
+    <tr><td><code>sent</code></td><td>Order terkirim ke alat, study belum masuk</td></tr>
+    <tr><td><code>taken</code></td><td>Order sudah ditarik/diproses alat</td></tr>
+    <tr><td><code>completed</code></td><td>Gambar sudah masuk ke PACS</td></tr>
+    <tr><td><code>cancelled</code></td><td>Order dibatalkan (tercatat di audit)</td></tr>
+  </tbody>
+</table>
+
+<h3>5.7 Callback study baru (tanpa polling)</h3>
+<p>Isi <b>Callback URL</b> dan <b>Callback key</b> di dashboard (⚙ Pengaturan). Worker
+<code>tools/notify-studies.php</code> (cron tiap menit) memantau <code>/changes</code> Orthanc dan
+mengirim <code>POST</code> ke URL SIMRS saat ada study stabil baru.</p>
+<pre><code>POST /api/pacs/callback
+Content-Type: application/json
+X-Bridge-Event: study.received
+X-Bridge-Key: &lt;CALLBACK_KEY&gt;
+X-Bridge-Signature: sha256=9f2c...e1
+
+{
+  "event": "study.received",
+  "accession_number": "A261105038",
+  "patient_id": "A048919",
+  "study_id": "9060f064-48cfbfa5-63c41030-bf2967f1-e70f790e",
+  "study_instance_uid": "1.2.840.114257.1.1.11232.191827.7270194.100",
+  "study_date": "20261119",
+  "modalities": ["DX"],
+  "images": 1,
+  "status": "completed"
+}</code></pre>
+<pre><code>// verifikasi tanda tangan di SIMRS
+$raw = file_get_contents('php://input');
+$expect = 'sha256=' . hash_hmac('sha256', $raw, getenv('PACS_CALLBACK_KEY'));
+if (!hash_equals($expect, $_SERVER['HTTP_X_BRIDGE_SIGNATURE'] ?? '')) {
+    http_response_code(401);
+    exit;
+}
+$event = json_decode($raw, true);
+http_response_code(200);   // wajib 2xx</code></pre>
+<p class="small muted">Pengiriman bersifat <b>at-least-once</b> (retry 3×, sisa dicoba pada jadwal
+berikutnya) — SIMRS wajib mengabaikan <code>study_id</code> yang sudah diproses.</p>
+
+<h3>5.8 Audit panggilan</h3>
+<p>Setiap request dicatat otomatis ke <code>data/audit.log</code> (JSON Lines: waktu, IP, kredensial,
+metode, path, status, durasi, accession). Aksi penting tercatat sebagai event
+(<code>worklist.create</code>, <code>worklist.delete</code>, <code>settings.update</code>, <code>auth.login</code>, …).
+Riwayat dibaca lewat <code>GET /audit</code> (sesi manager):</p>
+<pre><code>curl -b cookies.txt "http://10.4.0.10/audit?limit=20"
+curl -b cookies.txt "http://10.4.0.10/audit?accession=A261105038"
+curl -b cookies.txt "http://10.4.0.10/audit?event=worklist.delete"</code></pre>
+<p class="small muted">API key &amp; operator → <code>403</code>. File dirotasi otomatis pada 5 MB
+(<code>audit.log.1</code>) dan tidak pernah memuat nilai API key.</p>
+
 <h2>6. Alur integrasi yang disarankan</h2>
 <ol>
   <li><b>Health check</b> saat SIMRS start / berkala: <code>GET /health</code> dengan key.
@@ -380,19 +455,24 @@ open("hasil.jpg", "wb").write(img.content)</code></pre>
 <table>
   <thead><tr><th style="width:12%">HTTP</th><th style="width:26%">Arti</th><th>Contoh penyebab / tindakan</th></tr></thead>
   <tbody>
-    <tr><td class="c">200</td><td>OK</td><td>request berhasil</td></tr>
-    <tr><td class="c">201</td><td>Created</td><td><code>POST /worklists</code> berhasil</td></tr>
+    <tr><td class="c">200</td><td>OK</td><td>request berhasil; <code>POST /worklists</code> saat order sudah ada (idempotent, <code>created:false</code>)</td></tr>
+    <tr><td class="c">201</td><td>Created</td><td><code>POST /worklists</code> order baru berhasil</td></tr>
     <tr><td class="c">204</td><td>No Content</td><td>preflight <code>OPTIONS</code></td></tr>
     <tr><td class="c">400</td><td>Validasi gagal</td><td>field wajib kosong / parameter salah — perbaiki body</td></tr>
     <tr><td class="c">401</td><td>Unauthorized</td><td>key tidak dikirim, salah, atau ditaruh di query/body — kirim ulang di header</td></tr>
-    <tr><td class="c">403</td><td>Forbidden</td><td>endpoint administratif dipanggil dengan key — gunakan sesi manager</td></tr>
-    <tr><td class="c">404</td><td>Tidak ditemukan</td><td>worklist/study belum ada — ulangi polling beberapa saat lagi</td></tr>
+    <tr><td class="c">403</td><td>Forbidden</td><td>endpoint administratif (<code>/audit</code>, <code>PUT /settings</code>, <code>/users</code>) dipanggil dengan key/operator</td></tr>
+    <tr><td class="c">404</td><td>Tidak ditemukan</td><td><code>ORDER_NOT_FOUND</code> / <code>STUDY_NOT_FOUND</code> / <code>IMAGE_NOT_FOUND</code> — study belum masuk, coba lagi</td></tr>
     <tr><td class="c">405</td><td>Method tidak didukung</td><td>mis. <code>PATCH /worklists</code> — pakai GET/POST/PUT/DELETE</td></tr>
+    <tr><td class="c">409</td><td>Konflik accession</td><td><code>ACCESSION_CONFLICT</code> — accession sudah dipakai <b>pasien lain</b></td></tr>
     <tr><td class="c">500</td><td>Internal error</td><td>masalah server (mis. folder <code>data/</code> tidak writable) — laporkan ke admin PACS</td></tr>
     <tr><td class="c">502</td><td>Orthanc error</td><td>Orthanc mati/timeout; lihat <code>orthanc_status</code> &amp; <code>orthanc_body</code>, ulangi dengan backoff</td></tr>
-    <tr><td class="c">503</td><td>Fitur tidak tersedia</td><td>watermark diminta tetapi GD/FreeType tidak aktif di server</td></tr>
+    <tr><td class="c">503</td><td>Fitur tidak tersedia</td><td><code>WATERMARK_UNAVAILABLE</code> — GD/FreeType tidak aktif di server</td></tr>
   </tbody>
 </table>
+
+<p class="small">Setiap error memuat <code>error</code> (label), <code>code</code> (machine-readable,
+mis. <code>ACCESSION_CONFLICT</code>, <code>ORDER_NOT_FOUND</code>, <code>IMAGE_NOT_FOUND</code>), dan
+<code>message</code> yang siap ditampilkan ke petugas.</p>
 
 <h3>7.1 Bentuk respons error</h3>
 <pre><code>// 401
@@ -430,6 +510,8 @@ open("hasil.jpg", "wb").write(img.content)</code></pre>
     <tr><td>Mode kredensial</td><td class="mono small">curl -H "X-API-Key: &lt;key&gt;" http://10.4.0.10/me</td><td class="c"><code>"via": "api-key"</code></td></tr>
     <tr><td>Postman</td><td class="small">Import <code>postman/</code>, pilih environment <i>Live</i>, isi variabel <code>apiKey</code></td><td class="c">19 request OK</td></tr>
     <tr><td>Library CodeIgniter</td><td class="mono small">PACS_BRIDGE_TEST_URL=http://10.4.0.10 PACS_BRIDGE_TEST_KEY=&lt;key&gt; php tools/test-ci-integration.php</td><td class="c">12 pass, 0 fail</td></tr>
+    <tr><td>Order flow</td><td class="mono small">php tools/test-order-flow.php http://10.4.0.10 &lt;API_KEY&gt;</td><td class="c">8 pass, 0 fail</td></tr>
+    <tr><td>Callback</td><td class="mono small">php tools/notify-studies.php --latest --dry-run</td><td class="c">payload tampil</td></tr>
   </tbody>
 </table>
 
@@ -443,6 +525,8 @@ open("hasil.jpg", "wb").write(img.content)</code></pre>
     <tr><td class="path">GET /worklists</td><td>—</td><td>array entry worklist</td></tr>
     <tr><td class="path">POST /worklists</td><td><code>patient_name</code>, <code>title</code>, <code>patient_id</code>, <code>accession_number</code>, <code>procedure</code>, <code>modality</code>, <code>station_aet</code></td><td>201 + <code>{id, patient_name, accession_number}</code></td></tr>
     <tr><td class="path">GET /worklists/{id}</td><td>—</td><td>detail entry</td></tr>
+    <tr><td class="path">GET /worklists/{acc}/status</td><td>— (kunci = AccessionNumber)</td><td><code>{status, label, studies, timeline}</code></td></tr>
+    <tr><td class="path">GET /audit</td><td><code>limit</code>, <code>event</code>, <code>accession</code> (sesi manager)</td><td><code>{count, entries[]}</code></td></tr>
     <tr><td class="path">PUT /worklists/{id}</td><td>body sama seperti POST</td><td>entry terbaru</td></tr>
     <tr><td class="path">DELETE /worklists/{id}</td><td>—</td><td><code>{"deleted": id}</code></td></tr>
     <tr><td class="path">GET /studies</td><td><code>accession</code> | <code>patient_id</code> | <code>name</code> (wajib salah satu)</td><td>array study + <code>MainDicomTags.Modality</code></td></tr>
@@ -480,11 +564,14 @@ open("hasil.jpg", "wb").write(img.content)</code></pre>
     <tr><td class="c">8</td><td><code>php tools/test-api-key.php &lt;base&gt; &lt;key&gt;</code> → 8 pass, 0 fail</td><td class="c">☐</td></tr>
     <tr><td class="c">9</td><td>Akses API dibatasi LAN/VPN (atau HTTPS bila lintas jaringan)</td><td class="c">☐</td></tr>
     <tr><td class="c">10</td><td>Prosedur rotasi key disepakati (siapa membuat, kapan, cara memperbarui env)</td><td class="c">☐</td></tr>
+    <tr><td class="c">11</td><td>Idempotensi diuji: order dikirim dua kali hanya menghasilkan <b>satu</b> worklist</td><td class="c">☐</td></tr>
+    <tr><td class="c">12</td><td>Callback URL &amp; key diisi; endpoint SIMRS memverifikasi <code>X-Bridge-Signature</code></td><td class="c">☐</td></tr>
+    <tr><td class="c">13</td><td>Status order tampil di SIMRS dari <code>GET /worklists/{acc}/status</code></td><td class="c">☐</td></tr>
   </tbody>
 </table>
 
 <footer>
-  Bridge SIMRS ↔ Orthanc PACS · API Key (dokumen integrasi v1.0) · 19 November 2026 · Internal —
+  Bridge SIMRS ↔ Orthanc PACS · API Key (dokumen integrasi v1.1) · 19 November 2026 · Internal —
   nilai API key tidak pernah ditulis di dokumen ini.
 </footer>
 

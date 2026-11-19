@@ -190,7 +190,8 @@ Routes mode langsung memakai prefix `pacs/...` (lihat docblock di controller con
 | `health()`, `me()` | status Orthanc + verifikasi kredensial (`via: api-key`) |
 | `nextAccession()` / `next_accession()` | nomor AccessionNumber baru |
 | `worklists()`, `worklist($id)` | daftar / detail order |
-| `createWorklist(array)` / `create_worklist()` | kirim order |
+| `orderStatus($acc)` / `order_status()` | status order: `sent` / `taken` / `completed` / `cancelled` + timeline |
+| `createWorklist(array)` / `create_worklist()` | kirim order (**idempotent** per accession; `created:false` bila sudah ada, `409` bila accession milik pasien lain) |
 | `updateWorklist($id, array)` / `update_worklist()` | ubah order |
 | `deleteWorklist($id)` / `delete_worklist()` | hapus order |
 | `findStudiesByAccession()` · `findStudiesByPatientId()` · `findStudiesByName()` | cari study |
@@ -222,6 +223,10 @@ Routes mode langsung memakai prefix `pacs/...` (lihat docblock di controller con
 
 Nama method beda hanya konvensi: CI4 = camelCase, CI3 = snake_case.
 CI4 melempar `Throwable`; CI3 mengembalikan `false` / `[]` / `null` + `error_message()`.
+
+Error yang perlu ditangani di SIMRS: `401` (key salah), `409` (`ACCESSION_CONFLICT` — accession
+milik pasien lain), `404` (`ORDER_NOT_FOUND` / `STUDY_NOT_FOUND` / `IMAGE_NOT_FOUND`), `502`
+(Orthanc error). Badan error memuat `code` + `message` yang siap ditampilkan ke petugas.
 
 Watermark membutuhkan ekstensi **GD + FreeType**. Di mode A, server yang perlu GD adalah
 server bridge; di mode B, server SIMRS. Bila tidak tersedia, panggil dengan `$watermark = false`.

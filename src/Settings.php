@@ -32,6 +32,8 @@ final class Settings
         'user'        => null,
         'password'    => null,
         'api_key'     => null,
+        'callback_url'=> null,
+        'callback_key'=> null,
         'admin_user'  => 'admin',
         'study_filter'=> 'today',
         'worklist_devices' => null,
@@ -81,6 +83,12 @@ final class Settings
         $data['has_api_key'] = !empty($data['api_key']);
         if ($data['has_api_key']) {
             $data['api_key'] = self::maskKey((string) $data['api_key']);
+        }
+
+        $data['has_callback_url'] = !empty($data['callback_url']);
+        $data['has_callback_key'] = !empty($data['callback_key']);
+        if ($data['has_callback_key']) {
+            $data['callback_key'] = self::maskKey((string) $data['callback_key']);
         }
 
         return $data;
@@ -436,6 +444,22 @@ final class Settings
 
         if (array_key_exists('api_key', $input)) {
             $clean['api_key'] = trim((string) $input['api_key']);
+        }
+
+        if (array_key_exists('callback_url', $input)) {
+            $value = trim((string) $input['callback_url']);
+            if ($value !== '' && preg_match('#^https?://\S+$#i', $value) !== 1) {
+                throw new \InvalidArgumentException('callback_url harus URL http/https yang valid');
+            }
+            $clean['callback_url'] = $value;
+        }
+
+        if (array_key_exists('callback_key', $input)) {
+            $value = trim((string) $input['callback_key']);
+            if ($value !== '' && strlen($value) < 8) {
+                throw new \InvalidArgumentException('callback_key minimal 8 karakter');
+            }
+            $clean['callback_key'] = $value;
         }
 
         if (array_key_exists('study_filter', $input)) {

@@ -21,16 +21,43 @@ final class WorklistService
     }
 
     /**
-     * Buat order baru di worklist.
+     * Buat order baru di worklist. **Idempotent terhadap AccessionNumber**:
+     * bila order dengan accession yang sama sudah ada (mis. SIMRS mengirim ulang
+     * karena timeout), entry yang sudah ada dikembalikan dan `created` = false.
+     * Bila accession sama tetapi No. RM berbeda → WorklistConflictException (HTTP 409).
      *
      * Field wajib: patient_name, patient_id, accession_number, procedure.
      * Opsional: title, modality, station_aet, start_date, start_time, sps_id, sps_status, study_instance_uid.
      *
      * @param array<string, string|null> $order
-     * @return array{id: string, patient_name: string, accession_number: string}
+     * @return array{id: string, patient_name: string, accession_number: string, created: bool, duplicate: bool}
      */
     public function create(array $order): array
     {
+        $accession = trim((string) ($order['accession_number'] ?? ''));
+
+        if ($accession !== '') {
+            $existing = $this->findByAccession($accession);
+            if ($existing !== null) {
+                $existingPatientId = trim((string) ($existing['Tags']['PatientID'] ?? ''));
+                $patientId = trim((string) ($order['patient_id'] ?? ''));
+
+                if ($existingPatientId !== '' && $patientId !== '' && $existingPatientId !== $patientId) {
+                    throw new WorklistConflictException(
+                        'AccessionNumber ' . $accession . ' sudah dipakai pasien lain (No. RM ' . $existingPatientId . ').'
+                    );
+                }
+
+                return [
+                    'id'               => (string) ($existing['ID'] ?? ''),
+                    'patient_name'     => (string) ($existing['Tags']['PatientName'] ?? ''),
+                    'accession_number' => $accession,
+                    'created'          => false,
+                    'duplicate'        => true,
+                ];
+            }
+        }
+
         $tags = $this->buildTags($order, true);
         /** @var array<string, mixed> $response */
         $response = $this->client->createWorklist(['Tags' => $tags]);
@@ -39,6 +66,8 @@ final class WorklistService
             'id'               => (string) ($response['ID'] ?? ''),
             'patient_name'     => (string) $tags['0010,0010'],
             'accession_number' => (string) $tags['0008,0050'],
+            'created'          => true,
+            'duplicate'        => false,
         ];
     }
 

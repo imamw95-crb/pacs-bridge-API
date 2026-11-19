@@ -91,6 +91,16 @@ class PacsApi
     }
 
     /**
+     * Status order berdasarkan AccessionNumber: sent | taken | completed | cancelled.
+     *
+     * @return array<string, mixed>
+     */
+    public function orderStatus(string $accessionNumber): array
+    {
+        return $this->client->orderStatus($accessionNumber);
+    }
+
+    /**
      * @param array<string, mixed> $order
      * @return array<string, mixed>
      */

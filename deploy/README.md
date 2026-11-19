@@ -51,6 +51,12 @@ sudo docker run -d --name pacs-bridge --restart unless-stopped \
   pacs-bridge:1
 ```
 
+## Callback study baru (opsional)
+
+Pasang `deploy/cron-pacs-notify` ke `/etc/cron.d/pacs-notify` (tiap menit) dan isi
+**Callback URL** + **Callback key** di Pengaturan. Log: `/var/log/pacs-notify.log`
+(ringkasan) dan `/opt/pacs-bridge/data/callback.log` (per pengiriman).
+
 ## Catatan
 
 - `data/settings.json` tidak ikut paket, jadi konfigurasi di server aman saat update.
