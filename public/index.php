@@ -28,6 +28,9 @@ declare(strict_types=1);
  *   POST   /users                     (manager) {username,password,role}
  *   PUT    /users/{username}          (manager) {role?,password?}
  *   DELETE /users/{username}          (manager) hapus user
+ *   GET    /modalities                (manager) modality Orthanc + status alat di Pengaturan
+ *   PUT    /modalities/{aet}          (manager) daftarkan alat (DicomModalities) ke Orthanc
+ *   POST   /modalities/{aet}/echo     (manager) C-ECHO ke alat (uji jangkauan)
  */
 
 require_once dirname(__DIR__) . '/src/autoload.php';
@@ -35,6 +38,7 @@ require_once dirname(__DIR__) . '/src/autoload.php';
 use Simrs\Pacs\AuditLogger;
 use Simrs\Pacs\Auth;
 use Simrs\Pacs\Bridge;
+use Simrs\Pacs\ModalityService;
 use Simrs\Pacs\OrthancException;
 use Simrs\Pacs\Settings;
 use Simrs\Pacs\WatermarkService;
@@ -405,6 +409,94 @@ try {
             respondJson(['deleted' => $target]);
         }
         respondError(405, 'METHOD_NOT_ALLOWED', 'Gunakan PUT atau DELETE untuk /users/{username}.');
+    }
+
+    if ($path === '/modalities') {
+        if (!$isAdmin) {
+            respondError(403, 'FORBIDDEN', 'Status dan pendaftaran modality hanya untuk sesi login manager.');
+        }
+        if ($method !== 'GET') {
+            respondError(405, 'METHOD_NOT_ALLOWED', 'Gunakan GET untuk /modalities.');
+        }
+
+        $service = new ModalityService($bridge->client());
+        $registered = [];
+        $error = null;
+        try {
+            $registered = $service->list();
+        } catch (OrthancException $e) {
+            $error = $e->getMessage();
+        }
+
+        respondJson([
+            'reachable'  => $error === null,
+            'error'      => $error,
+            'modalities' => $registered,
+            'devices'    => ModalityService::mergeDevices($settings->devices(), $registered),
+        ]);
+    }
+
+    if (preg_match('#^/modalities/([A-Za-z0-9_\-]{1,16})$#', $path, $m)) {
+        if (!$isAdmin) {
+            respondError(403, 'FORBIDDEN', 'Pendaftaran modality hanya untuk sesi login manager.');
+        }
+        if ($method !== 'PUT') {
+            respondError(405, 'METHOD_NOT_ALLOWED', 'Gunakan PUT untuk /modalities/{aet}.');
+        }
+
+        $aet = $m[1];
+        $device = $settings->findDevice($aet);
+        if ($device === null) {
+            respondError(
+                404,
+                'DEVICE_NOT_FOUND',
+                'AE Title ' . $aet . ' belum ada di Pengaturan → Alat Worklist (simpan dulu alatnya).'
+            );
+        }
+
+        $body = readJsonBody();
+        $host = array_key_exists('host', $body) ? trim((string) $body['host']) : null;
+        $port = array_key_exists('port', $body) ? (int) $body['port'] : null;
+
+        $service = new ModalityService($bridge->client());
+        $config = $service->register($device, $host !== '' ? $host : null, $port);
+
+        AuditLogger::event('modality.register', [
+            'aet'  => $aet,
+            'host' => $config['Host'] ?? null,
+            'port' => $config['Port'] ?? null,
+        ]);
+
+        respondJson([
+            'registered'    => true,
+            'aet'           => $aet,
+            'configuration' => $config,
+            'message'       => 'Alat ' . $aet . ' terdaftar di Orthanc (MWL + C-STORE).',
+        ]);
+    }
+
+    if (preg_match('#^/modalities/([A-Za-z0-9_\-]{1,16})/echo$#', $path, $m)) {
+        if (!$isAdmin) {
+            respondError(403, 'FORBIDDEN', 'Uji C-ECHO hanya untuk sesi login manager.');
+        }
+        if ($method !== 'POST') {
+            respondError(405, 'METHOD_NOT_ALLOWED', 'Gunakan POST untuk /modalities/{aet}/echo.');
+        }
+
+        $service = new ModalityService($bridge->client());
+        try {
+            $result = $service->echo($m[1]);
+        } catch (OrthancException $e) {
+            respondJson([
+                'aet'          => $m[1],
+                'echo'         => false,
+                'code'         => 'ECHO_FAILED',
+                'message'      => 'C-ECHO gagal — alat belum terjangkau atau AET/IP/port salah.',
+                'orthanc_body' => $e->responseBody,
+            ], 502);
+        }
+
+        respondJson(['aet' => $m[1], 'echo' => true, 'result' => $result]);
     }
 
     if ($path === '/health') {

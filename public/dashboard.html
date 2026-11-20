@@ -174,6 +174,22 @@
   .study .actions .view-btn { flex: 1 1 100%; font-size: 12px; font-weight: 600; padding: 7px 10px; }
   .empty { color: var(--muted); font-size: 13px; padding: 22px 4px; text-align: center; }
 
+  /* worklist: panel sidebar sempit → kartu bertumpuk (bukan tabel) agar tombol Hapus selalu terlihat */
+  .wl-list { display: grid; gap: 8px; min-width: 0; }
+  .wl-item {
+    border: 1px solid var(--line); border-radius: 8px; background: #fff;
+    padding: 9px 11px; display: grid; gap: 3px; min-width: 0;
+  }
+  .wl-item:hover { border-color: var(--line-strong); background: #f9fbfd; }
+  .wl-top { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
+  .wl-name { flex: 1 1 auto; min-width: 0; font-size: 13px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+  .wl-del { flex: 0 0 auto; padding: 3px 9px; font-size: 11.5px; border-radius: 6px; }
+  .wl-meta {
+    font-size: 11.5px; color: var(--muted); line-height: 1.4;
+    display: flex; flex-wrap: wrap; gap: 0 8px; min-width: 0; overflow-wrap: anywhere;
+  }
+  .wl-meta b { font-weight: 600; color: var(--text); }
+
   .toast { position: fixed; right: 20px; bottom: 20px; display: grid; gap: 8px; z-index: 120; }
   .toast div {
     padding: 11px 16px; border-radius: 8px; font-size: 13px; background: #fff;
@@ -244,12 +260,29 @@
   #settings .fields, #account .fields { display: grid; gap: 12px; grid-template-columns: 1fr 1fr; }
   #settings .fields .full, #account .fields .full { grid-column: 1 / -1; }
   @media (max-width: 620px) { #settings .fields, #account .fields { grid-template-columns: 1fr; } }
+  input[type=checkbox] { width: auto; margin: 0; }
+  #settings .chk {
+    display: flex; align-items: center; gap: 8px; cursor: pointer; margin: 0;
+    font-size: 12.5px; font-weight: 500; color: var(--text);
+  }
+  #settings .chk input { flex: 0 0 auto; }
   #settings .devices { display: grid; gap: 8px; margin-bottom: 10px; }
-  #settings .device { display: grid; grid-template-columns: 1.3fr 1fr .7fr auto; gap: 8px; align-items: center; }
-  #settings .devices-head { display: grid; grid-template-columns: 1.3fr 1fr .7fr auto; gap: 8px; margin-bottom: 6px; }
+  #settings .device {
+    display: grid; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 8px;
+    grid-template-columns: 1.2fr 1fr .6fr 1fr .55fr;
+  }
+  #settings .device .dev-actions {
+    grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding-top: 8px; border-top: 1px dashed var(--line);
+  }
+  #settings .device .dev-actions button { padding: 5px 10px; font-size: 12px; }
+  #settings .dev-state { font-size: 11.5px; font-weight: 600; color: var(--muted); }
+  #settings .dev-state.ok { color: var(--ok); }
+  #settings .dev-state.bad { color: var(--danger); }
+  #settings .devices-head { display: grid; grid-template-columns: 1.2fr 1fr .6fr 1fr .55fr; gap: 8px; margin-bottom: 6px; }
   #settings .devices-head span { font-size: 11px; color: var(--muted); font-weight: 600; }
   @media (max-width: 620px) {
-    #settings .device, #settings .devices-head { grid-template-columns: 1fr; }
+    #settings .device { grid-template-columns: 1fr 1fr; }
     #settings .devices-head { display: none; }
   }
   #settings .users { display: grid; gap: 8px; }
@@ -404,7 +437,11 @@
         </header>
         <div class="body">
           <div class="studies-tools">
-            <div class="mod-tabs" id="modTabs" role="tablist" title="Saring study menurut modalitas"></div>
+            <div class="row" style="align-items:flex-start;gap:8px">
+              <div class="mod-tabs" id="modTabs" role="tablist" title="Saring study menurut modalitas"></div>
+              <div class="spacer"></div>
+              <button type="button" class="ghost" id="btnStudySettings" style="display:none" title="Atur filter &amp; tab modalitas">⚙ Atur</button>
+            </div>
             <div class="row">
               <input id="searchInput" placeholder="Cari Accession / No. RM / Nama pasien" style="flex:1;min-width:150px">
               <button id="btnSearch">Cari</button>
@@ -464,15 +501,20 @@
         <div class="muted" style="margin-bottom:10px">
           Daftar alat/station yang bisa dipilih saat mengirim order. AE Title dipakai sebagai
           <code>ScheduledStationAETitle</code> di worklist, jadi pastikan sama dengan AET alat.
+          Modality tiap alat otomatis muncul sebagai tab filter di panel <strong>Study &amp; Gambar</strong>
+          (mis. isi <code>MG</code> → muncul tab Mammografi (MG)).
+          Isi <strong>IP alat</strong> + <strong>Port</strong> lalu tekan <strong>Daftarkan ke Orthanc</strong> supaya alat
+          boleh menarik MWL dan mengirim gambar (C-STORE) tanpa mengedit konfigurasi Orthanc manual.
         </div>
         <div class="devices-head">
-          <span>Nama alat</span><span>AE Title</span><span>Modality</span><span></span>
+          <span>Nama alat</span><span>AE Title</span><span>Modality</span><span>IP / host alat</span><span>Port</span>
         </div>
         <div class="devices" id="deviceBox"></div>
         <button type="button" class="ghost" id="btnAddDevice">＋ Tambah alat</button>
+        <div class="muted" id="modalityStatusNote" style="margin-top:8px"></div>
       </div>
 
-      <div class="sec">
+      <div class="sec" id="secDisplay">
         <h4>Tampilan &amp; akses</h4>
         <div class="fields">
           <div>
@@ -481,6 +523,17 @@
               <option value="today">Hari ini</option>
               <option value="all">Semua tanggal</option>
             </select>
+          </div>
+          <div>
+            <label>Tab modalitas di Study &amp; Gambar</label>
+            <label class="chk" for="sAutoTabs">
+              <input type="checkbox" id="sAutoTabs">
+              <span>Tambah tab otomatis untuk modalitas yang ada di study</span>
+            </label>
+            <div class="muted" style="margin-top:4px">
+              Aktif (disarankan): alat baru yang mengirim gambar tanpa didaftarkan di daftar alat
+              tetap punya tab sendiri (mis. <code>MG</code>). Nonaktif: tab hanya dari daftar alat di atas.
+            </div>
           </div>
           <div>
             <label for="sApiKey">API Key (opsional)</label>
@@ -591,6 +644,9 @@
               <tr><td>POST</td><td class="path">/settings/password</td><td>ganti password akun sendiri</td><td>❌ login</td></tr>
               <tr><td>GET/POST</td><td class="path">/users</td><td>daftar / tambah user dashboard</td><td>❌ manager</td></tr>
               <tr><td>PUT/DELETE</td><td class="path">/users/{username}</td><td>ubah peran / reset password / hapus user</td><td>❌ manager</td></tr>
+              <tr><td>GET</td><td class="path">/modalities</td><td>modality Orthanc + status alat di Pengaturan (terdaftar / belum)</td><td>❌ manager</td></tr>
+              <tr><td>PUT</td><td class="path">/modalities/{aet}</td><td><strong>daftarkan alat ke Orthanc</strong> (DicomModalities: MWL + C-STORE)</td><td>❌ manager</td></tr>
+              <tr><td>POST</td><td class="path">/modalities/{aet}/echo</td><td>tes C-ECHO ke alat (cek IP/port/AET)</td><td>❌ manager</td></tr>
             </tbody>
           </table>
 
@@ -711,28 +767,61 @@
 let pendingClearCallback = false;
   let studyLimit = 24;
   let currentRecent = null;
+  let worklistDevices = [];
+  // modalitas yang benar-benar muncul di study (untuk tab otomatis) + saklar di Pengaturan
+  let detectedModalities = [];
+  let autoModalityTabs = true;
 
-  // Satu sumber daftar tab modalitas: kode DICOM => label tab & label kalimat.
-  // Tambah modalitas baru cukup di sini (tab ikut dibuat otomatis).
-  const MODALITIES = {
-    DX: { tab: 'Ronsen (DX)', label: 'rontgen (DX)' },
-    CT: { tab: 'CT Scan (CT)', label: 'CT scan (CT)' },
-    US: { tab: 'USG (US)', label: 'USG (US)' },
-    ECG: { tab: 'EKG (ECG)', label: 'EKG (ECG)' },
-    PX: { tab: 'Panoramic (PX)', label: 'panoramic (PX)' }
+  // Nama ramah kode modalitas DICOM (dipakai label tab & kalimat "Menampilkan …").
+  // Tab = modalitas default di bawah + semua `modality` alat di Pengaturan (worklist_devices),
+  // jadi menambah alat baru (mis. MG/MR) otomatis memunculkan tabnya di Study & Gambar.
+  const MODALITY_LABELS = {
+    DX: 'Rontgen', CT: 'CT Scan', US: 'USG', ECG: 'EKG', PX: 'Panoramic',
+    CR: 'CR', MG: 'Mammografi', MR: 'MRI', NM: 'Kedokteran Nuklir'
   };
+  const DEFAULT_MODALITIES = ['DX', 'CT', 'US', 'ECG', 'PX'];
   // Modalitas yang citranya sudah memuat identitas pasien dari alat → tanpa watermark
   // (harus sama dengan StudyService::NO_WATERMARK_MODALITIES di server).
   const NO_WATERMARK_MODALITIES = ['US', 'ECG'];
 
   const modalityCodes = (value) => String(value || '').toUpperCase().split('/').filter(Boolean);
-  const modalityLabel = (code) => (MODALITIES[code] ? MODALITIES[code].label : '');
+  const modalityName = (code) => MODALITY_LABELS[code] || '';
+  const modalityLabel = (code) => (modalityName(code) ? modalityName(code).toLowerCase() + ' (' + code + ')' : code);
   const isNoWatermark = (value) => modalityCodes(value).some((m) => NO_WATERMARK_MODALITIES.indexOf(m) !== -1);
 
+  function modalityTabCodes() {
+    const codes = DEFAULT_MODALITIES.slice();
+    const sources = worklistDevices.map((d) => d.modality);
+    if (autoModalityTabs) {
+      sources.push(...detectedModalities);
+    }
+    sources.forEach((value) => modalityCodes(value).forEach((code) => {
+      if (codes.indexOf(code) === -1) codes.push(code);
+    }));
+    return codes;
+  }
+
+  // Setiap study yang tampil bisa menambah tab modalitasnya sendiri, jadi alat baru yang
+  // mengirim gambar (tanpa didaftarkan di Pengaturan) tetap bisa disaring.
+  function noteStudyModalities(studies) {
+    if (!Array.isArray(studies) || studies.length === 0) return;
+    const before = modalityTabCodes().join(',');
+    studies.forEach((s) => {
+      const tags = (s && s.MainDicomTags) || {};
+      modalityCodes(tags.Modality).forEach((code) => {
+        if (detectedModalities.indexOf(code) === -1) detectedModalities.push(code);
+      });
+    });
+    if (modalityTabCodes().join(',') !== before) renderModalityTabs();
+  }
+
   function renderModalityTabs() {
-    const buttons = ['<button type="button" class="active" data-mod="" role="tab">Semua</button>'];
-    Object.keys(MODALITIES).forEach((code) => {
-      buttons.push(`<button type="button" data-mod="${esc(code)}" role="tab">${esc(MODALITIES[code].tab)}</button>`);
+    const codes = modalityTabCodes();
+    if (studyModality !== '' && codes.indexOf(studyModality) === -1) studyModality = '';
+    const buttons = [`<button type="button"${studyModality === '' ? ' class="active"' : ''} data-mod="" role="tab">Semua</button>`];
+    codes.forEach((code) => {
+      const text = modalityName(code) ? modalityName(code) + ' (' + code + ')' : code;
+      buttons.push(`<button type="button"${code === studyModality ? ' class="active"' : ''} data-mod="${esc(code)}" role="tab" title="Saring study modalitas ${esc(code)}">${esc(text)}</button>`);
     });
     $('modTabs').innerHTML = buttons.join('');
   }
@@ -777,6 +866,7 @@ let pendingClearCallback = false;
     $('userName').textContent = user || 'admin';
     $('userRole').textContent = currentRole === 'admin' ? 'manager' : 'operator';
     $('btnSettings').style.display = currentRole === 'admin' ? '' : 'none';
+    $('btnStudySettings').style.display = currentRole === 'admin' ? '' : 'none';
     $('pwdWarn').hidden = !defaultCreds;
     if ($('accountWho')) {
       $('accountWho').textContent = (user || '—') + ' · ' + (currentRole === 'admin' ? 'manager' : 'operator');
@@ -888,19 +978,21 @@ let pendingClearCallback = false;
         return;
       }
 
-      box.innerHTML = `<table>
-        <thead><tr><th>Pasien</th><th>Accession</th><th>Pemeriksaan</th><th>Jadwal</th><th></th></tr></thead>
-        <tbody>${items.map((w) => {
+      box.innerHTML = `<div class="wl-list">${items.map((w) => {
           const t = w.Tags || {};
           const sps = (t.ScheduledProcedureStepSequence || [])[0] || {};
-          return `<tr>
-            <td><div style="font-weight:600">${esc(t.PatientName)}</div><div class="muted mono">${esc(t.PatientID || '')}</div></td>
-            <td class="mono">${esc(t.AccessionNumber || '—')}</td>
-            <td>${esc(sps.ScheduledProcedureStepDescription || '—')}<div class="muted">${esc(sps.Modality || '')} · ${esc(sps.ScheduledStationAETitle || '')}</div></td>
-            <td class="mono">${esc(fmtDate(sps.ScheduledProcedureStepStartDate, sps.ScheduledProcedureStepStartTime))}</td>
-            <td style="text-align:right"><button class="danger" data-del="${esc(w.ID)}">Hapus</button></td>
-          </tr>`;
-        }).join('')}</tbody></table>`;
+          const alat = [sps.Modality, sps.ScheduledStationAETitle].filter(Boolean).join(' · ');
+          const acc = t.AccessionNumber || '—';
+          return `<div class="wl-item">
+            <div class="wl-top">
+              <div class="wl-name">${esc(t.PatientName || '—')}</div>
+              <button class="danger wl-del" data-del="${esc(w.ID)}" title="Hapus order ${esc(acc)}">Hapus</button>
+            </div>
+            <div class="wl-meta"><span>No. RM <b class="mono">${esc(t.PatientID || '—')}</b></span><span>Acc <b class="mono">${esc(acc)}</b></span></div>
+            <div class="wl-meta"><span>${esc(sps.ScheduledProcedureStepDescription || '—')}</span>${alat ? `<span>${esc(alat)}</span>` : ''}</div>
+            <div class="wl-meta"><span class="mono">${esc(fmtDate(sps.ScheduledProcedureStepStartDate, sps.ScheduledProcedureStepStartTime))}</span></div>
+          </div>`;
+        }).join('')}</div>`;
 
       box.querySelectorAll('button[data-del]').forEach((btn) => {
         btn.addEventListener('click', async () => {
@@ -1056,6 +1148,9 @@ let pendingClearCallback = false;
         + (mod ? '&modality=' + encodeURIComponent(mod) : ''));
       const list = Array.isArray(res.studies) ? res.studies : [];
       const n = typeof res.count === 'number' ? res.count : list.length;
+      // modalitas baru yang muncul di study langsung dapat tab sendiri
+      noteStudyModalities(list);
+      if (res.outside && Array.isArray(res.outside.studies)) noteStudyModalities(res.outside.studies);
       const empty = ymd === 'all'
         ? 'Belum ada study di PACS.'
         : (modLabel
@@ -1377,7 +1472,6 @@ let pendingClearCallback = false;
   $('btnMore').addEventListener('click', () => { studyLimit += 24; loadRecent(currentRecent === null ? undefined : currentRecent, true); });
 
   /* ---------- alat worklist ---------- */
-  let worklistDevices = [];
 
   function normalizeDevices(list, fallback) {
     const out = (Array.isArray(list) ? list : [])
@@ -1386,14 +1480,18 @@ let pendingClearCallback = false;
         name: String(d.name || d.aet || '').trim(),
         // AE Title tidak di-uppercase: MWL mencocokkan ScheduledStationAETitle peka huruf.
         aet: String(d.aet || '').trim(),
-        modality: String(d.modality || fallback.modality || 'DX').trim().toUpperCase()
+        modality: String(d.modality || fallback.modality || 'DX').trim().toUpperCase(),
+        host: String(d.host || '').trim(),
+        port: Number(d.port) > 0 ? Number(d.port) : 104
       }));
     if (out.length > 0) return out;
 
     return [{
       name: String(fallback.name || fallback.aet || 'Alat utama'),
       aet: String(fallback.aet || '').trim(),
-      modality: String(fallback.modality || 'DX').toUpperCase()
+      modality: String(fallback.modality || 'DX').toUpperCase(),
+      host: '',
+      port: 104
     }];
   }
 
@@ -1416,11 +1514,66 @@ let pendingClearCallback = false;
 
   function deviceRowHtml(d) {
     return `<div class="device" data-device>
-      <input class="d-name" placeholder="Nama alat (mis. DX-1)" value="${esc(d.name || '')}">
-      <input class="d-aet mono" placeholder="LEAD_CLIENT" value="${esc(d.aet || '')}">
-      <input class="d-mod mono" placeholder="DX" value="${esc(d.modality || '')}">
-      <button type="button" class="ghost danger" data-del-device title="Hapus alat">Hapus</button>
+      <input class="d-name" placeholder="Nama alat (mis. USG G2)" value="${esc(d.name || '')}">
+      <input class="d-aet mono" placeholder="LEAD_CLIENT" value="${esc(d.aet || '')}" title="AE Title alat (peka huruf besar/kecil)">
+      <input class="d-mod mono" placeholder="US" value="${esc(d.modality || '')}" title="Kode modality DICOM: DX, CT, US, ECG, PX, MG, …">
+      <input class="d-host mono" placeholder="192.168.10.130" value="${esc(d.host || '')}" title="IP / host alat di jaringan">
+      <input class="d-port mono" placeholder="104" value="${esc(d.port || 104)}" title="Port DICOM alat (umumnya 104)">
+      <div class="dev-actions">
+        <span class="dev-state" data-state>status belum dicek</span>
+        <button type="button" class="ghost" data-register title="Simpan lalu daftarkan alat ini ke Orthanc (MWL + C-STORE)">Daftarkan ke Orthanc</button>
+        <button type="button" class="ghost" data-echo title="Uji C-ECHO ke alat (perlu terdaftar di Orthanc)">Tes C-ECHO</button>
+        <button type="button" class="ghost danger" data-del-device title="Hapus alat">Hapus</button>
+      </div>
     </div>`;
+  }
+
+  function setDeviceState(row, registered, orthanc) {
+    const el = row.querySelector('[data-state]');
+    if (!el) return;
+    if (!registered) {
+      el.className = 'dev-state bad';
+      el.textContent = 'Belum terdaftar di Orthanc';
+      return;
+    }
+    const parts = [];
+    if (orthanc && orthanc.host) parts.push(orthanc.host + ':' + orthanc.port);
+    if (orthanc && orthanc.allow_find_worklist) parts.push('MWL');
+    if (orthanc && orthanc.allow_store) parts.push('C-STORE');
+    el.className = 'dev-state ok';
+    el.textContent = 'Terdaftar di Orthanc' + (parts.length ? ' · ' + parts.join(' · ') : '');
+  }
+
+  async function loadModalityStatus() {
+    const box = $('deviceBox');
+    const note = $('modalityStatusNote');
+    try {
+      const res = await api('modalities');
+      const byAet = {};
+      (res.devices || []).forEach((d) => { byAet[String(d.aet || '').toLowerCase()] = d; });
+      Array.from(box.querySelectorAll('[data-device]')).forEach((row) => {
+        const info = byAet[row.querySelector('.d-aet').value.trim().toLowerCase()];
+        setDeviceState(row, !!(info && info.registered), info ? info.orthanc : null);
+        // alat yang didaftarkan manual dulu belum punya IP di Pengaturan → isi dari Orthanc
+        if (info && info.registered && info.orthanc) {
+          const hostInput = row.querySelector('.d-host');
+          if (!hostInput.value.trim() && info.orthanc.host) hostInput.value = info.orthanc.host;
+          // untuk alat yang sudah terdaftar, port mengikuti Orthanc (mis. LEAD_CLIENT = 11112)
+          const portInput = row.querySelector('.d-port');
+          if (info.orthanc.port && String(info.orthanc.port) !== portInput.value.trim()) {
+            portInput.value = info.orthanc.port;
+          }
+        }
+      });
+      if (note) {
+        note.textContent = res.reachable
+          ? 'Orthanc: ' + (res.modalities || []).length + ' modality terdaftar'
+            + ((res.modalities || []).length ? ' — ' + (res.modalities || []).map((m) => m.id).join(', ') : '') + '.'
+          : 'Status Orthanc tidak terbaca: ' + (res.error || 'tidak diketahui');
+      }
+    } catch (e) {
+      if (note) note.textContent = 'Status Orthanc tidak terbaca: ' + e.message;
+    }
   }
 
   function addDeviceRow(d) {
@@ -1428,9 +1581,48 @@ let pendingClearCallback = false;
     wrap.innerHTML = deviceRowHtml(d || {});
     const row = wrap.firstElementChild;
     $('deviceBox').appendChild(row);
+
     row.querySelector('[data-del-device]').addEventListener('click', () => {
       row.remove();
       if ($('deviceBox').children.length === 0) addDeviceRow({});
+    });
+
+    row.querySelector('[data-register]').addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      const aet = row.querySelector('.d-aet').value.trim();
+      if (aet === '') { toast('Isi AE Title alat dulu', 'err'); return; }
+      if (row.querySelector('.d-host').value.trim() === '') {
+        toast('Isi kolom “IP / host alat” dulu (mis. 192.168.10.130)', 'err');
+        return;
+      }
+      btn.disabled = true;
+      try {
+        // simpan dulu: endpoint pendaftaran membaca data alat dari Pengaturan
+        await saveSettings({ close: false, silent: true });
+        const res = await api('modalities/' + encodeURIComponent(aet), { method: 'PUT' });
+        setDeviceState(row, true, res.configuration);
+        toast('Alat ' + aet + ' terdaftar di Orthanc (MWL + C-STORE)', 'ok');
+        loadModalityStatus();
+      } catch (err) {
+        toast('Gagal daftarkan ' + aet + ': ' + err.message, 'err');
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    row.querySelector('[data-echo]').addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      const aet = row.querySelector('.d-aet').value.trim();
+      if (aet === '') { toast('Isi AE Title alat dulu', 'err'); return; }
+      btn.disabled = true;
+      try {
+        await api('modalities/' + encodeURIComponent(aet) + '/echo', { method: 'POST' });
+        toast('C-ECHO OK — ' + aet + ' terjangkau', 'ok');
+      } catch (err) {
+        toast('C-ECHO gagal: ' + err.message, 'err');
+      } finally {
+        btn.disabled = false;
+      }
     });
   }
 
@@ -1444,7 +1636,9 @@ let pendingClearCallback = false;
       .map((row) => ({
         name: row.querySelector('.d-name').value.trim(),
         aet: row.querySelector('.d-aet').value.trim(),
-        modality: row.querySelector('.d-mod').value.trim().toUpperCase()
+        modality: row.querySelector('.d-mod').value.trim().toUpperCase(),
+        host: row.querySelector('.d-host').value.trim(),
+        port: Number(row.querySelector('.d-port').value) || 0
       }))
       .filter((d) => d.name !== '' || d.aet !== '');
   }
@@ -1463,10 +1657,16 @@ let pendingClearCallback = false;
       const res = await api('settings');
       const s = res.settings || {};
       worklistDevices = normalizeDevices(s.worklist_devices, fallbackDevice(s, res.effective || {}));
+      autoModalityTabs = s.auto_modality_tabs !== false;
     } catch (e) {
       worklistDevices = normalizeDevices([], fallbackDevice({}, {}));
     }
+    const prevModality = studyModality;
     renderDeviceSelect(worklistDevices);
+    // alat baru boleh membawa modality baru → tab Study & Gambar ikut menyesuaikan
+    renderModalityTabs();
+    // tab yang hilang (alatnya dihapus) membuat filter kembali ke "Semua" → muat ulang daftar study
+    if (studyModality !== prevModality) loadRecent(currentRecent === null ? undefined : currentRecent);
   }
 
   $('btnAddDevice').addEventListener('click', () => addDeviceRow({}));
@@ -1489,7 +1689,9 @@ let pendingClearCallback = false;
       $('sModality').value = s.modality || eff.modality || '';
       $('sClientIp').value = s.client_ip || '';
       $('sFilter').value = s.study_filter || 'today';
+      $('sAutoTabs').checked = s.auto_modality_tabs !== false;
       renderDeviceRows(normalizeDevices(s.worklist_devices, fallbackDevice(s, eff)));
+      loadModalityStatus();
       $('sApiKey').value = '';
       $('sApiKey').placeholder = s.has_api_key ? '(sudah diset — isi untuk mengganti)' : 'kosong = pakai sesi login';
       pendingClearKey = false;
@@ -1524,6 +1726,14 @@ let pendingClearCallback = false;
   }
 
   $('btnSettings').addEventListener('click', openSettings);
+
+  // tombol "⚙ Atur" di panel Study & Gambar → Pengaturan bagian "Tampilan & akses"
+  $('btnStudySettings').addEventListener('click', async () => {
+    await openSettings();
+    const section = $('secDisplay');
+    if (section) section.scrollIntoView({ block: 'start' });
+    $('sAutoTabs').focus();
+  });
   $('btnCloseSettings').addEventListener('click', () => $('settings').classList.remove('open'));
 
   /* ---------- dokumentasi API (di panel pengaturan) ---------- */
@@ -1771,47 +1981,67 @@ let pendingClearCallback = false;
     toast('Callback key akan dihapus setelah "Simpan Pengaturan"');
   });
 
-  $('settingsForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
+  function settingsPayload() {
+    const payload = {
+      server_ip: $('sServerIp').value.trim(),
+      http_port: $('sHttpPort').value,
+      dicom_port: $('sDicomPort').value,
+      timeout: $('sTimeout').value,
+      called_aet: $('sCalled').value.trim(),
+      calling_aet: $('sCalling').value.trim(),
+      modality: $('sModality').value.trim(),
+      client_ip: $('sClientIp').value.trim(),
+      study_filter: $('sFilter').value,
+      auto_modality_tabs: $('sAutoTabs').checked,
+      worklist_devices: collectDevices()
+    };
+    const newKey = $('sApiKey').value.trim();
+    if (newKey !== '') payload.api_key = newKey;
+    else if (pendingClearKey) payload.api_key = '';
+
+    payload.callback_url = $('sCallbackUrl').value.trim();
+    const callbackKey = $('sCallbackKey').value.trim();
+    if (callbackKey !== '') payload.callback_key = callbackKey;
+    else if (pendingClearCallback) payload.callback_key = '';
+
+    return payload;
+  }
+
+  /**
+   * Simpan Pengaturan. `close:false` dipakai tombol "Daftarkan ke Orthanc"
+   * (simpan dulu tanpa menutup modal); `silent:true` menahan toast sukses.
+   */
+  async function saveSettings(opts) {
+    const options = opts || {};
     const btn = $('btnSaveSettings');
     btn.disabled = true;
     try {
-      const payload = {
-        server_ip: $('sServerIp').value.trim(),
-        http_port: $('sHttpPort').value,
-        dicom_port: $('sDicomPort').value,
-        timeout: $('sTimeout').value,
-        called_aet: $('sCalled').value.trim(),
-        calling_aet: $('sCalling').value.trim(),
-        modality: $('sModality').value.trim(),
-        client_ip: $('sClientIp').value.trim(),
-        study_filter: $('sFilter').value,
-        worklist_devices: collectDevices()
-      };
-      const newKey = $('sApiKey').value.trim();
-      if (newKey !== '') payload.api_key = newKey;
-      else if (pendingClearKey) payload.api_key = '';
-
-      payload.callback_url = $('sCallbackUrl').value.trim();
-      const callbackKey = $('sCallbackKey').value.trim();
-      if (callbackKey !== '') payload.callback_key = callbackKey;
-      else if (pendingClearCallback) payload.callback_key = '';
-
       await api('settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(settingsPayload())
       });
       pendingClearKey = false;
       pendingClearCallback = false;
-      toast('Pengaturan disimpan', 'ok');
-      $('settings').classList.remove('open');
+      if (!options.silent) toast('Pengaturan disimpan', 'ok');
+      if (options.close !== false) $('settings').classList.remove('open');
       loadDevices();
       loadHealth();
+      return true;
     } catch (err) {
       toast('Gagal menyimpan: ' + err.message, 'err');
+      throw err;
     } finally {
       btn.disabled = false;
+    }
+  }
+
+  $('settingsForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      await saveSettings({ close: true });
+    } catch (err) {
+      // pesan sudah ditampilkan oleh saveSettings()
     }
   });
 

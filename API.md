@@ -63,6 +63,9 @@ php -r "echo bin2hex(random_bytes(24)), PHP_EOL;"
 | `PUT /settings` (ubah IP/port/AET) | ❌ **403** | ✅ | ❌ **403** |
 | `POST /settings/password` (password sendiri) | ❌ **403** | ✅ | ✅ |
 | `/users` — daftar/tambah/ubah/hapus user | ❌ **403** | ✅ | ❌ **403** |
+| `GET /modalities` (status modality Orthanc) | ❌ **403** | ✅ | ❌ **403** |
+| `PUT /modalities/{aet}` (daftarkan alat) | ❌ **403** | ✅ | ❌ **403** |
+| `POST /modalities/{aet}/echo` (C-ECHO) | ❌ **403** | ✅ | ❌ **403** |
 | `POST /login`, `POST /logout`, `GET /me` | publik | publik | publik |
 
 > Alasan: API key dipakai untuk **operasional data** (order & gambar). Perubahan
@@ -110,11 +113,14 @@ jadi panggilan `fetch`/XHR dari browser tidak terblokir CORS.
 | `POST /settings/password` | ❌ `403` | sesi login (manager/operator) |
 | `GET /users`, `POST /users` | ❌ `403` | sesi **manager** saja |
 | `PUT /users/{username}`, `DELETE /users/{username}` | ❌ `403` | sesi **manager** saja |
+| `GET /modalities` | ❌ `403` | sesi **manager** saja |
+| `PUT /modalities/{aet}` | ❌ `403` | sesi **manager** saja |
+| `POST /modalities/{aet}/echo` | ❌ `403` | sesi **manager** saja |
 
 Ringkasnya: **semua endpoint data** (`/health`, `/accession`, `/worklists*`, `/studies*`,
-`/instances*`, `GET /settings`) bisa dipanggil dengan key. **Hanya 4 kelompok administratif**
+`/instances*`, `GET /settings`) bisa dipanggil dengan key. **Hanya kelompok administratif**
 yang menolak key: `GET /settings/api-key`, `PUT /settings`, `POST /settings/password`,
-dan `/users*`.
+`/users*`, dan `/modalities*`.
 
 Contoh respons bila key tidak dikirim / salah / ditaruh di query string:
 
@@ -130,6 +136,7 @@ Contoh respons bila key tidak dikirim / salah / ditaruh di query string:
 | `PUT /settings` | `Perubahan pengaturan harus melalui sesi login` |
 | `POST /settings/password` | `Harus login` |
 | `/users*` | `Hanya akun manager yang boleh mengelola user` |
+| `/modalities*` | `Status dan pendaftaran modality hanya untuk sesi login manager` |
 
 Mengosongkan API Key di Pengaturan **tidak** membuka akses anonim: tanpa key **dan** tanpa
 sesi selalu `401`, karena API ini memang tidak punya endpoint data terbuka.
@@ -165,6 +172,7 @@ sesi selalu `401`, karena API ini memang tidak punya endpoint data terbuka.
 | 18 | **Status order untuk petugas** | `GET /worklists/{acc}/status` | tampilkan "terkirim / diproses / gambar masuk / dibatalkan" tanpa polling gambar |
 | 19 | **Audit log** (siapa, kapan, order apa) | `GET /audit` | telusuri pembuatan/penghapusan order & perubahan konfigurasi (manager) |
 | 20 | **Callback/webhook study baru** | `tools/notify-studies.php` + `callback_url` | SIMRS menerima `POST study.received` (HMAC) tanpa polling |
+| 21 | **Daftarkan alat baru ke Orthanc** (DicomModalities) | `GET /modalities`, `PUT /modalities/{aet}`, `POST /modalities/{aet}/echo` | alat baru (mis. USG G2) boleh menarik MWL & mengirim gambar tanpa edit `orthanc.json` (manager) |
 
 Catatan penting: bridge **tidak menyimpan gambar** — semua endpoint gambar mengambil
 langsung dari Orthanc saat dipanggil (stateless).
@@ -710,20 +718,25 @@ Tidak bisa dipanggil dengan API key (403) supaya key tidak bisa membocorkan diri
   "modality": "DX",
   "client_ip": "192.168.200.230",
   "study_filter": "today",
+  "auto_modality_tabs": true,
   "api_key": "opsional — kosongkan untuk mematikan API key",
   "worklist_devices": [
-    { "name": "DX-1", "aet": "LEAD_CLIENT", "modality": "DX" },
-    { "name": "USG", "aet": "VersanaB-000000", "modality": "US" },
-    { "name": "EKG", "aet": "LEAD_PHILIP", "modality": "ECG" },
-    { "name": "CT Scan", "aet": "CT140643", "modality": "CT" }
+    { "name": "DX-1", "aet": "LEAD_CLIENT", "modality": "DX", "host": "", "port": 104 },
+    { "name": "USG", "aet": "VersanaB-000000", "modality": "US", "host": "192.168.10.130", "port": 104 },
+    { "name": "EKG", "aet": "LEAD_PHILIP", "modality": "ECG", "host": "172.16.200.137", "port": 104 },
+    { "name": "CT Scan", "aet": "CT140643", "modality": "CT", "host": "192.168.10.19", "port": 104 }
   ]
 }
 ```
 
 - `worklist_devices` = daftar **alat/station worklist** yang bisa dipilih saat mengirim order.
   `aet` dipakai sebagai `ScheduledStationAETitle`, `modality` sebagai `Modality` pada
-  `ScheduledProcedureStepSequence`. Kirim `[]` untuk kembali memakai AE Title/Modality default
+  `ScheduledProcedureStepSequence`. `host`/`port` = alamat DICOM alat, dipakai tombol
+  **Daftarkan ke Orthanc** (§4.8). Kirim `[]` untuk kembali memakai AE Title/Modality default
   dari konfigurasi. Dashboard menampilkannya di **Pengaturan → Alat Worklist (modality)**.
+- `auto_modality_tabs` (default `true`) = tab modalitas di panel **Study & Gambar** ikut
+  menambahkan modalitas yang benar-benar muncul di study. Nonaktif (`false`) → tab hanya dari
+  `worklist_devices`. Hanya berpengaruh ke tampilan dashboard.
 
 - Field `api_key` **boleh tidak dikirim**: kalau tidak ada di body, key yang sudah tersimpan
   **tetap dipakai** (tidak terhapus). Ini perilaku dashboard: simpan pengaturan tanpa mengisi
@@ -887,6 +900,79 @@ Catatan operasional:
   `/var/log/pacs-notify.log`, detail per kiriman `data/callback.log`.
 - Uji manual: `php tools/notify-studies.php --latest` / `--dry-run`.
 - Callback tidak aktif bila `callback_url` kosong.
+
+---
+
+### 4.8 Modality — daftarkan alat baru ke Orthanc
+
+Alat radiologi baru (mis. **USG G2**) tidak akan bisa menarik MWL atau mengirim gambar
+(C-STORE) sebelum AE Title-nya terdaftar di Orthanc (`DicomModalities`). Endpoint ini
+melakukannya **dari dashboard** memakai data alat di **Pengaturan → Alat Worklist**
+(`worklist_devices` di `data/settings.json`), tanpa mengedit `/etc/orthanc/orthanc.json`.
+
+**Sesi manager saja** — `X-API-Key` dan sesi operator ditolak `403`.
+
+#### `GET /modalities`
+
+```json
+{
+  "reachable": true,
+  "error": null,
+  "modalities": [
+    {"id": "VersanaB-000000", "aet": "VersanaB-000000", "host": "192.168.10.130", "port": 104,
+     "allow_find_worklist": true, "allow_store": true}
+  ],
+  "devices": [
+    {"name": "USG", "aet": "VersanaB-000000", "modality": "US", "host": "192.168.10.130", "port": 104,
+     "registered": true, "orthanc": {"id": "VersanaB-000000", "host": "192.168.10.130", "port": 104}}
+  ]
+}
+```
+
+`devices[]` = alat di Pengaturan + status `registered` (sudah ada di Orthanc atau belum).
+
+#### `PUT /modalities/{aet}`
+
+Mendaftarkan / memperbarui modality Orthanc (memanggil `PUT /modalities/{aet}` milik Orthanc).
+
+| Field body (opsional) | Keterangan |
+|---|---|
+| `host` | menimpa IP/host yang tersimpan di Pengaturan |
+| `port` | menimpa port DICOM (default 104) |
+
+```bash
+curl -X PUT "$BASE/modalities/USG-G2" -b cookies.txt -H "Content-Type: application/json" -d '{}'
+```
+
+```json
+{
+  "registered": true,
+  "aet": "USG-G2",
+  "configuration": {"AET": "USG-G2", "Host": "192.168.10.199", "Port": 104,
+                    "AllowFindWorklist": true, "AllowStore": true, "AllowFind": true, "AllowEcho": true},
+  "message": "Alat USG-G2 terdaftar di Orthanc (MWL + C-STORE)."
+}
+```
+
+Flag yang dipasang: `AllowEcho`, `AllowFind`, `AllowFindWorklist`, `AllowStore`, `AllowGet`,
+`AllowMove`. Konfigurasi lain (mis. `Timeout`, `RetrieveMethod`) dipertahankan bila modality
+sudah ada. `404 DEVICE_NOT_FOUND` bila AE Title belum ada di Pengaturan (simpan alatnya dulu),
+`400` bila host kosong/tidak valid.
+
+> **Penting (persistensi):** perubahan via REST hanya di memori Orthanc. Agar bertahan setelah
+> container Orthanc di-restart, jalankan Orthanc dengan `"DicomModalitiesInDatabase": true`
+> (lihat AGENTS.md §3/§6.3). Tanpa itu, alat yang didaftarkan dari dashboard **hilang** saat
+> Orthanc restart — walau tetap ada di daftar alat Pengaturan (tinggal tekan Daftarkan lagi).
+
+#### `POST /modalities/{aet}/echo`
+
+C-ECHO untuk memastikan IP/port/AET alat benar (alat harus menyala).
+
+```json
+{"aet": "USG-G2", "echo": true, "result": {}}
+```
+
+Bila alat tidak terjangkau → **502** `{"code":"ECHO_FAILED","message":"C-ECHO gagal — alat belum terjangkau atau AET/IP/port salah."}`.
 
 ---
 

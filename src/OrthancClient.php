@@ -184,6 +184,49 @@ final class OrthancClient
     }
 
     /**
+     * Daftar modality (DicomModalities) yang dikenal Orthanc.
+     *
+     * @return list<string>
+     */
+    public function modalities(): array
+    {
+        /** @var list<string> $ids */
+        $ids = $this->json('GET', '/modalities');
+
+        return array_values(array_map('strval', $ids));
+    }
+
+    /**
+     * Konfigurasi satu modality (`/modalities/{id}/configuration`, Orthanc >= 1.12).
+     *
+     * @return array<string, mixed>
+     */
+    public function modalityConfiguration(string $id): array
+    {
+        return $this->json('GET', '/modalities/' . rawurlencode($id) . '/configuration');
+    }
+
+    /**
+     * Buat / ubah modality saat runtime (`PUT /modalities/{id}`).
+     *
+     * @param array<string, mixed> $configuration
+     */
+    public function registerModality(string $id, array $configuration): void
+    {
+        $this->json('PUT', '/modalities/' . rawurlencode($id), $configuration);
+    }
+
+    /**
+     * C-ECHO ke modality untuk memastikan alat terjangkau.
+     *
+     * @return array<string, mixed>
+     */
+    public function modalityEcho(string $id, int $timeout = 5): array
+    {
+        return $this->json('POST', '/modalities/' . rawurlencode($id) . '/echo', ['Timeout' => $timeout]);
+    }
+
+    /**
      * C-FIND ke modality lain (Orthanc bertindak sebagai SCU).
      * Mengembalikan ID query Orthanc; jawabannya dibaca lewat queryAnswers().
      *

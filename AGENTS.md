@@ -39,6 +39,7 @@ Modality yang dipakai: **DX** (Digital Radiography), AET `LEAD_CLIENT`.
 | `public/assets/logo-ris.png` + `favicon.png` | logo program **RIS-HLS PATROL** (header & halaman login) dan ikon tab browser |
 | `src/Auth.php` | sesi login dashboard (PHP session) |
 | `src/Settings.php` | pengaturan dari dashboard (`data/settings.json`), password admin, daftar alat worklist |
+| `src/ModalityService.php` | pendaftaran modality (`DicomModalities`) ke Orthanc lewat REST (`PUT /modalities/{id}`) + C-ECHO |
 | `data/settings.json` | runtime: hasil edit pengaturan & hash password admin (jangan di-commit) |
 | `public/.htaccess` | rewrite untuk Apache/Laragon |
 | `public/router.php` | router server dev (`php -S ... public/router.php`) — meniru rewrite Apache, wajib agar path ber-titik (UID DICOM) tidak 404 |
@@ -75,6 +76,7 @@ Modality yang dipakai: **DX** (Digital Radiography), AET `LEAD_CLIENT`.
 | AET client | **`LEAD_CLIENT`** (modality `DX`) |
 | IP client | `192.168.200.230` (port lokal `11112` untuk C-MOVE) |
 | Config aktif di server | `/tmp/orthanc.json` — **di-generate** dari `/etc/orthanc/*.json` |
+| `DicomModalitiesInDatabase` | **belum diset** (= `false`) → modality yang didaftarkan via REST hanya di memori dan **hilang saat Orthanc restart**; set `"DicomModalitiesInDatabase": true` di `/etc/orthanc/orthanc.json` + `docker restart orthanc` agar permanen |
 | Port 11112 di server | milik container `dicom-router` (AET `DCMROUTER`), **bukan** Orthanc |
 | PACS sumber (ditarik cron) | **`192.168.10.15:11121`**, AET `SANTESRV1`, `RetrieveMethod = C-GET` |
 | `192.168.10.110` | mesin Windows (IIS 10) dengan DICOM di port 104; **menolak** AET pemanggil yang tidak terdaftar (`reason 0x03`) — belum bisa dipakai sebagai sumber |
@@ -113,9 +115,13 @@ PACS_HTTP_USER, PACS_HTTP_PASS, PACS_BRIDGE_KEY, PACS_TIMEOUT, PACS_TIMEZONE (de
   `ScheduledStationAETitle` di MWL bersifat **case-sensitive** — order berisi
   `VERSANAB-000000` **tidak** ditemukan alat yang query dengan `VersanaB-000000`.
   Sudah ditangani `Settings::validateDevices()` + dashboard (AET disimpan apa adanya).
-- Alat baru harus **didaftarkan di Orthanc** (`/etc/orthanc/orthanc.json` →
-  `DicomModalities`, butuh `AllowFindWorklist` untuk MWL) — tanpa itu C-FIND MWL
-  ditolak: `This AET is not listed in configuration option "DicomModalities"`.
+- Alat baru harus **didaftarkan di Orthanc** (`DicomModalities`, butuh `AllowFindWorklist` untuk MWL) —
+  tanpa itu C-FIND MWL ditolak: `This AET is not listed in configuration option "DicomModalities"`.
+  Sejak 20 Nov 2026 ini bisa langsung dari dashboard: isi **IP alat + Port** di
+  Pengaturan → Alat Worklist lalu tekan **Daftarkan ke Orthanc** (`PUT /modalities/{aet}` →
+  Orthanc `PUT /modalities/{id}`, lihat `src/ModalityService.php`). Tombol **Tes C-ECHO**
+  memastikan IP/port/AET benar. Pendaftaran manual di `/etc/orthanc/orthanc.json` tetap valid
+  (wajib bila Orthanc tidak bisa dihubungi dari bridge).
 - Tambahkan juga alat baru ke `worklist_devices` (Pengaturan dashboard) supaya muncul
   di pilihan **Alat / Station tujuan**.
 - Sebelum mendaftarkan alat, **pastikan AET-nya** — kirim A-ASSOCIATE-RQ dengan called AET kandidat
@@ -234,6 +240,9 @@ if ($img !== null) {
 | POST | `/users` | tambah user `{username,password,role}` (**manager**) |
 | PUT | `/users/{username}` | ubah peran / reset password (**manager**) |
 | DELETE | `/users/{username}` | hapus user — akun sendiri & manager terakhir ditolak (**manager**) |
+| GET | `/modalities` | modality Orthanc + status tiap alat di Pengaturan (`registered`) — **manager** |
+| PUT | `/modalities/{aet}` | daftarkan/ubah alat di Orthanc (`DicomModalities`: MWL + C-STORE) — **manager** |
+| POST | `/modalities/{aet}/echo` | C-ECHO ke alat (uji IP/port/AET) — **manager** |
 | GET | `/health` | status Orthanc + status worklist (`worklist.reachable`, jumlah order) + jumlah study |
 | GET | `/accession` | nomor AccessionNumber baru mengikuti format alat Orthanc (dipakai form order) |
 | GET | `/worklists` | daftar order |
@@ -292,19 +301,38 @@ Contoh body POST `/worklists`:
   **ZIP (JPG)** / **ZIP (DICOM)** / **Viewer** sebaris; badge modalitas diisi modalitas
   sebenarnya dari seri (mis. `US`, bukan selalu `DX`); thumbnail yang gagal dimuat menampilkan
   teks "gambar belum tersedia" (bukan kotak kosong),
-- daftar worklist + form kirim order + tombol hapus (form punya pilihan **Alat / Station tujuan**
+- daftar worklist + form kirim order + tombol hapus: order dirender sebagai **kartu bertumpuk**
+  (`div.wl-list` → `.wl-item`: nama pasien + tombol **Hapus** di kanan atas, lalu No. RM/accession,
+  pemeriksaan + `Modality · AET`, dan jadwal) — **bukan tabel 5 kolom**, karena panel sidebar hanya
+  ±360px sehingga kolom terakhir dulu terpotong `overflow: hidden` milik `.panel`
+  (form punya pilihan **Alat / Station tujuan**
   dari daftar alat di Pengaturan, dan **Accession Number terisi otomatis** dari `GET /accession`
   — format alat Orthanc — dengan tombol ⟳ untuk nomor baru; saat kosong muncul tombol
   "⚙ Atur / tambah alat worklist"),
-- **panel Alat Worklist** di Pengaturan: daftar alat (Nama, AE Title, Modality) dengan tombol
-  **＋ Tambah alat** / **Hapus**, disimpan sebagai `worklist_devices` di `data/settings.json`
+- **panel Alat Worklist** di Pengaturan: daftar alat (Nama, AE Title, Modality, **IP/host alat**, **Port**)
+  dengan tombol **＋ Tambah alat** / **Hapus**, disimpan sebagai `worklist_devices` di `data/settings.json`
   (server 10.4.0.10 saat ini: `LEAD_CLIENT · DX`, `USG · VersanaB-000000 · US`,
   `EKG · LEAD_PHILIP · ECG`, dan `CT Scan · CT140643 · CT`),
-  AE Title disimpan **apa adanya** (huruf besar/kecil berpengaruh pada MWL),
-- **tab modalitas** di atas toolbar study: **Semua / Ronsen (DX) / CT Scan (CT) / USG (US) / EKG (ECG) / Panoramic (PX)**
+  AE Title disimpan **apa adanya** (huruf besar/kecil berpengaruh pada MWL).
+  Tiap baris alat punya status **(Belum) Terdaftar di Orthanc** (`GET /modalities`) plus tombol
+  **Daftarkan ke Orthanc** dan **Tes C-ECHO** — jadi menambah alat baru (mis. **USG G2**) cukup:
+  isi Nama/AE Title/Modality/IP/Port → **Daftarkan ke Orthanc** (alat otomatis disimpan dulu ke
+  Pengaturan). Untuk alat EKG/USG baru, minta teknisi mengecek AET alatnya (jangan menebak
+  dari `StationName`) dan tekan **Tes C-ECHO** saat alat menyala,
+- **tab modalitas** di atas toolbar study: **Semua / Rontgen (DX) / CT Scan (CT) / USG (US) / EKG (ECG) / Panoramic (PX)**
   (`GET /studies/recent?modality=US|DX|CT|ECG|PX`; ikut menyaring daftar "di luar filter tanggal").
-  Tab dibuat otomatis dari peta `MODALITIES` di `public/dashboard.html` — tambah modalitas baru
-  cukup di peta itu (label tab + label kalimat ikut berubah),
+  Tab = `DEFAULT_MODALITIES` di `public/dashboard.html` **+ modality tiap alat di Pengaturan**
+  (`worklist_devices`) **+ modalitas yang benar-benar ada di study** (`noteStudyModalities()` dari
+  `MainDicomTags.Modality`) — jadi alat baru yang mengirim gambar tanpa didaftarkan pun langsung
+  punya tab (saklar **Pengaturan → Tampilan & akses → “Tambah tab otomatis …”**,
+  `auto_modality_tabs`, default aktif; tombol **⚙ Atur** di toolbar Study & Gambar membuka bagian
+  itu, terlihat hanya untuk manager).
+  (label dari `MODALITY_LABELS`, kode tak dikenal tampil apa adanya). Tab dibangun ulang oleh
+  `renderModalityTabs()` setiap `loadDevices()` (boot & setelah **Simpan Pengaturan**) dan setiap
+  modalitas baru terdeteksi dari study; bila tab yang
+  sedang aktif hilang (alatnya dihapus), filter kembali ke "Semua" dan daftar study dimuat ulang.
+  Backend tidak perlu diubah: `/studies/recent` menerima kode modalitas DICOM apa pun
+  (`^[A-Z0-9]{1,16}$` di `public/index.php`),
 - **filter study default "Hari ini"** (+ tombol "Hari ini" / "Semua tanggal" / pilih tanggal),
   dan bila ada study bertanggal **setelah** hari ini (jam alat maju) muncul catatan kuning
   "⚠ N study bertanggal di luar filter ini" + kartu study tersebut tetap ditampilkan di bawah
@@ -402,6 +430,7 @@ curl -H "X-API-Key: $PACS_BRIDGE_KEY" \
 | **`GET /audit`** (riwayat audit) | ✅ | ❌ **403** | ❌ **403** |
 | **`POST /settings/password`** (akun sendiri) | ✅ | ✅ | ❌ **403** |
 | **`/users`** (kelola user) | ✅ | ❌ **403** | ❌ **403** |
+| **`/modalities*`** (status & daftar alat ke Orthanc) | ✅ | ❌ **403** | ❌ **403** |
 | `/login`, `/logout`, `/me` | publik | publik | publik |
 
 Alasan: API key untuk **operasional data** (worklist & gambar), perubahan konfigurasi server +
@@ -538,6 +567,39 @@ php tools/notify-studies.php --latest               # kirim ulang study terbaru 
 php tools/notify-studies.php --quiet                # mode cron
 ```
 
+### 6.9 Mendaftarkan alat baru dari dashboard (`DicomModalities`)
+
+Dulu alat baru wajib diedit manual di `/etc/orthanc/orthanc.json` + restart Orthanc. Sekarang
+cukup dari **Pengaturan → Alat Worklist** (sesi **manager**):
+
+1. **＋ Tambah alat** → isi **Nama** (mis. `USG G2`), **AE Title** (AET asli alat — peka huruf),
+   **Modality** (`US`), **IP / host alat**, **Port** (umumnya `104`).
+2. Klik **Daftarkan ke Orthanc** → dashboard menyimpan alat ke `worklist_devices` lalu memanggil
+   `PUT /modalities/{aet}`; bridge meneruskannya ke Orthanc `PUT /modalities/{id}` dengan flag
+   `AllowFindWorklist` + `AllowStore` (+ `AllowFind`, `AllowEcho`, `AllowGet`, `AllowMove`).
+   Badge berubah jadi **Terdaftar di Orthanc · IP:port · MWL · C-STORE**.
+3. Saat alat menyala, klik **Tes C-ECHO** → harus muncul "C-ECHO OK". Gagal = IP/port/AET salah
+   atau alat belum terhubung (bukan masalah MWL/SIMRS).
+4. Kirim order uji dari form worklist lalu hapus ordernya.
+
+Endpoint (sesi manager, `X-API-Key` **ditolak 403**):
+
+```powershell
+curl -H "Content-Type: application/json" -X PUT http://10.4.0.10/modalities/USG-G2 -b cookies.txt -d '{}'
+curl -X POST http://10.4.0.10/modalities/USG-G2/echo -b cookies.txt
+curl http://10.4.0.10/modalities -b cookies.txt      # status semua modality + alat di Pengaturan
+```
+
+Hal yang mudah salah:
+
+- **AET harus AET alat yang sebenarnya**, bukan nama tampilan (`StationName`). Kalau alat menolak
+  assosiasi (`RJ reason=0x03/0x07`), AET-nya salah — pakai `dicom-probe.py`.
+- `Modality` di baris alat **hanya** label/tab dashboard; yang menentukan MWL adalah AET.
+- **Persistensi:** tanpa `"DicomModalitiesInDatabase": true` di `/etc/orthanc/orthanc.json`,
+  modality hasil pendaftaran hilang setelah container Orthanc di-restart (daftar alat di
+  Pengaturan tetap ada — tinggal klik **Daftarkan ke Orthanc** lagi).
+- Jangan arahkan `Host` ke IP bridge/server sendiri; itu harus IP alat.
+
 ---
 
 ## 7. Perintah
@@ -599,6 +661,10 @@ Di Laragon: arahkan docroot ke folder `public/`.
 7. Jangan menguji C-STORE gambar palsu ke PACS produksi tanpa izin + rencana penghapusan.
 8. Perubahan pada autentikasi/user: `php tools/test-users.php <baseUrl> <manager> <password>` → **19 pass, 0 fail**
    (tool ini membuat user uji lalu menghapusnya sendiri).
+9. Perubahan pada pendaftaran alat/modality: di Pengaturan tambah alat uji (mis. `TESTG2`, IP dummy) →
+   **Daftarkan ke Orthanc** → badge berubah "Terdaftar di Orthanc" dan `GET /modalities` menampilkan AET itu.
+   **Wajib bersih-bersih:** `curl -X DELETE http://10.4.0.10:8042/modalities/TESTG2`, hapus baris alat
+   di Pengaturan, dan pastikan `GET /modalities` kembali ke daftar asli.
 
 ---
 

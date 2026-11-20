@@ -361,6 +361,18 @@ final class Settings
     }
 
     /**
+     * @param mixed $value
+     */
+    private static function toBool($value): bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        return in_array(strtolower(trim((string) $value)), ['1', 'true', 'yes', 'on'], true);
+    }
+
+    /**
      * @param array<string, mixed> $values
      */
     public function save(array $values): void
@@ -470,6 +482,10 @@ final class Settings
             $clean['study_filter'] = $value;
         }
 
+        if (array_key_exists('auto_modality_tabs', $input)) {
+            $clean['auto_modality_tabs'] = self::toBool($input['auto_modality_tabs']);
+        }
+
         if (array_key_exists('worklist_devices', $input)) {
             $clean['worklist_devices'] = self::validateDevices($input['worklist_devices']);
         }
@@ -478,10 +494,13 @@ final class Settings
     }
 
     /**
-     * Daftar alat/station worklist: [{name, aet, modality}].
+     * Daftar alat/station worklist: [{name, aet, modality, host, port}].
+     *
+     * `host`/`port` dipakai untuk mendaftarkan alat ke Orthanc (`DicomModalities`)
+     * lewat dashboard, bukan untuk koneksi dari bridge.
      *
      * @param mixed $input
-     * @return list<array{name: string, aet: string, modality: string}>
+     * @return list<array{name: string, aet: string, modality: string, host: string, port: int}>
      */
     private static function validateDevices($input): array
     {
@@ -499,6 +518,8 @@ final class Settings
             // di MWL bersifat case-sensitive (alat GE memakai "VersanaB-000000").
             $aet = trim((string) ($row['aet'] ?? ''));
             $modality = strtoupper(trim((string) ($row['modality'] ?? '')));
+            $host = trim((string) ($row['host'] ?? ''));
+            $port = (int) ($row['port'] ?? 0);
 
             if ($name === '' && $aet === '') {
                 continue;
@@ -509,14 +530,58 @@ final class Settings
             if ($modality !== '' && !preg_match('/^[A-Z0-9]{1,16}$/', $modality)) {
                 throw new \InvalidArgumentException('Modality alat tidak valid: ' . $modality);
             }
+            if ($host !== '' && !preg_match('/^[A-Za-z0-9][A-Za-z0-9.\-]{0,63}$/', $host)) {
+                throw new \InvalidArgumentException('IP/host alat tidak valid: ' . $host);
+            }
+            if ($port !== 0 && ($port < 1 || $port > 65535)) {
+                throw new \InvalidArgumentException('Port DICOM alat harus 1-65535: ' . $port);
+            }
 
             $devices[] = [
                 'name'     => $name !== '' ? $name : $aet,
                 'aet'      => $aet,
                 'modality' => $modality !== '' ? $modality : 'DX',
+                'host'     => $host,
+                'port'     => $port > 0 ? $port : 104,
             ];
         }
 
         return $devices;
+    }
+
+    /**
+     * Alat worklist yang tersimpan (sudah dinormalisasi, aman dipakai service lain).
+     *
+     * @return list<array{name: string, aet: string, modality: string, host: string, port: int}>
+     */
+    public function devices(): array
+    {
+        $raw = $this->all()['worklist_devices'] ?? null;
+        if (!is_array($raw)) {
+            return [];
+        }
+
+        try {
+            return self::validateDevices($raw);
+        } catch (InvalidArgumentException) {
+            // Data lama/tidak valid tidak boleh mematikan halaman Pengaturan.
+            return [];
+        }
+    }
+
+    /**
+     * Cari alat berdasarkan AE Title (peka huruf besar/kecil, sama seperti MWL).
+     *
+     * @return array{name: string, aet: string, modality: string, host: string, port: int}|null
+     */
+    public function findDevice(string $aet): ?array
+    {
+        foreach ($this->devices() as $device) {
+            if ($device['aet'] === $aet) {
+                return $device;
+            }
+        }
+
+        return null;
     }
 }
