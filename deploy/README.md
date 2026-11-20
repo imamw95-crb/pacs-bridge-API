@@ -1,6 +1,6 @@
 # Deploy Bridge ke server 10.4.0.10
 
-Ringkasan operasional (detail lengkap ada di [`../AGENTS.md`](../AGENTS.md) §13).
+Ringkasan operasional (detail lengkap ada di [`../docs/REF-DEPLOY.md`](../docs/REF-DEPLOY.md)).
 
 | Item | Nilai |
 |---|---|
@@ -16,7 +16,7 @@ Ringkasan operasional (detail lengkap ada di [`../AGENTS.md`](../AGENTS.md) §13
 ```powershell
 # Windows
 $tgz = "$env:TEMP\pacs-bridge-deploy.tar.gz"
-tar -czf $tgz src public tools integrations postman deploy setting.txt Dockerfile .dockerignore AGENTS.md API.md PACS-ORTHANC.md
+tar -czf $tgz src public tools integrations postman docs deploy setting.txt Dockerfile .dockerignore AGENTS.md API.md PACS-ORTHANC.md
 & 'C:\Program Files\PuTTY\pscp.exe' -pw <PASSWORD> $tgz pacs@10.4.0.10:/tmp/pacs-bridge-deploy.tar.gz
 ```
 

@@ -961,7 +961,7 @@ sudah ada. `404 DEVICE_NOT_FOUND` bila AE Title belum ada di Pengaturan (simpan 
 
 > **Penting (persistensi):** perubahan via REST hanya di memori Orthanc. Agar bertahan setelah
 > container Orthanc di-restart, jalankan Orthanc dengan `"DicomModalitiesInDatabase": true`
-> (lihat AGENTS.md §3/§6.3). Tanpa itu, alat yang didaftarkan dari dashboard **hilang** saat
+> (lihat AGENTS.md §3 dan `docs/REF-DASHBOARD.md` §6.9). Tanpa itu, alat yang didaftarkan dari dashboard **hilang** saat
 > Orthanc restart — walau tetap ada di daftar alat Pengaturan (tinggal tekan Daftarkan lagi).
 
 #### `POST /modalities/{aet}/echo`

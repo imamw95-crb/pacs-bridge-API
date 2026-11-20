@@ -153,7 +153,8 @@ Konfigurasi bisa dioverride lewat environment:
 | [`docs/API-KEY-SIMRS.pdf`](docs/API-KEY-SIMRS.pdf) | **panduan API key untuk tim SIMRS** (cetak): tabel endpoint ✅/❌, mode integrasi CI (`PacsApi`/`Pacs_api` vs langsung), error, checklist go-live |
 | [`integrations/codeigniter/README.md`](integrations/codeigniter/README.md) | library CodeIgniter 3 & 4 — **mode API** (lewat bridge, `X-API-Key`) atau langsung ke Orthanc |
 | [`PACS-ORTHANC.md`](PACS-ORTHANC.md) | catatan teknis server PACS (temuan & quirk) |
-| [`AGENTS.md`](AGENTS.md) | aturan kerja developer/agent |
+| [`AGENTS.md`](AGENTS.md) | aturan kerja developer/agent (ringkas; detail di `docs/REF-*.md`) |
+| [`docs/REF-API.md`](docs/REF-API.md), [`REF-DASHBOARD.md`](docs/REF-DASHBOARD.md), [`REF-OPERASIONAL.md`](docs/REF-OPERASIONAL.md), [`REF-CI.md`](docs/REF-CI.md), [`REF-DEPLOY.md`](docs/REF-DEPLOY.md), [`REF-LINGKUNGAN.md`](docs/REF-LINGKUNGAN.md) | rujukan detail per topik (dibaca sesuai kebutuhan) |
 | [`deploy/README.md`](deploy/README.md) | deploy container + cron tarikan study |
 
 ## Contoh singkat (program)
