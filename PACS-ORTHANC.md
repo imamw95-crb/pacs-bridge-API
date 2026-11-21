@@ -68,7 +68,7 @@ Aturan penting:
 
 Backup: `orthanc.json.bak-20261113-093050`, `worklists.json.bak-20261113-093050`
 
-### 3.2 Hanya di filesystem container (hilang bila container di-recreate)
+### 3.2 Hanya di filesystem container (sebelum ada compose)
 
 ```bash
 # matikan plugin MWL versi sample agar tidak bentrok dengan orthanc-worklists
@@ -87,6 +87,55 @@ docker restart orthanc
 > **Wajib diulang** setiap kali container dibuat ulang / image di-update.
 > Kalau tidak: plugin sample mengambil alih MWL → `/worklists` jadi 404 dan
 > plugin `orthanc-worklists` gagal register (`Can only register one plugin to handle modality worklists`).
+
+### 3.2a Dikelola `docker compose` (sejak 20 Nov 2026)
+
+Container `orthanc` + `orthanc-proxy` sekarang dibuat dari compose, bukan `docker run`.
+File di repo: [`deploy/orthanc/docker-compose.yml`](./deploy/orthanc/docker-compose.yml);
+di server dipasang sebagai `/home/pacs/orthanc/docker-compose.yml`.
+
+| Hal | Sebelum (`docker run`) | Sekarang (compose) |
+|---|---|---|
+| Plugin sample `libModalityWorklists.so` | di-`docker exec mv` manual, hilang saat recreate | di-rename otomatis oleh `entrypoint` |
+| `/var/lib/orthanc/worklists` | di filesystem container, hilang saat recreate | volume `orthanc-worklists` |
+| Image | `orthancteam/orthanc:latest` (bisa naik versi saat pull) | dipin ke digest `sha256:fdb2bd7c…` (1.12.11) |
+| Health | tidak ada | `healthcheck` python3 → `GET /system` (`docker compose ps` = `healthy`) |
+
+```bash
+cd /home/pacs/orthanc
+sudo docker compose ps          # orthanc harus "Up (healthy)"
+sudo docker compose up -d       # terapkan perubahan compose (recreate, ±10 detik)
+sudo docker logs --tail 50 orthanc
+```
+
+Data study tidak terpengaruh: volume `orthanc-storage` dipakai sebagai `external: true`,
+jadi `docker compose down` **tidak** menghapusnya. Container lama dicatat di
+`/home/pacs/orthanc/rollback-docker-run.txt` bila perlu kembali ke `docker run`.
+
+#### Pengaman systemd (sejak 20 Nov 2026)
+
+PACS pernah mati ~40 detik karena `docker compose down` dijalankan manual di
+`/home/pacs/orthanc` (13:41:52, TTY `pts/3`). Supaya tidak terulang:
+
+| Unit | Fungsi |
+|---|---|
+| `orthanc-compose.service` | `docker compose up -d` saat boot (`enabled`, `oneshot` + `RemainAfterExit`) |
+| `orthanc-compose-watchdog.timer` | memicu `orthanc-compose-watchdog.service` **tiap 2 menit** |
+| `orthanc-compose-watchdog.service` | `docker compose up -d --remove-orphans` — idempotent, membuat ulang container bila terhapus |
+
+```bash
+systemctl status orthanc-compose.service
+systemctl list-timers 'orthanc*'          # NEXT harus ≤ 2 menit
+systemctl start orthanc-compose-watchdog.service   # pulihkan manual tanpa menunggu timer
+```
+
+Sudah diuji: `docker compose down` → container hilang & `/system` mati →
+watchdog dipicu → `orthanc (healthy)` + `/system` 200 dalam ±20 detik.
+
+> **Jangan** `docker compose down -v` — opsi `-v` menghapus volume `orthanc-worklists`
+> (DB worklist). Volume study `orthanc-storage` aman karena `external: true`.
+> Untuk maintenance yang memang ingin mematikan Orthanc:
+> `sudo systemctl stop orthanc-compose-watchdog.timer` dulu.
 
 ### 3.3 Modality `LEAD_CLIENT` (didaftarkan juga via REST, permanen di config)
 

@@ -1,0 +1,12 @@
+[Unit]
+Description=Pastikan stack Orthanc (orthanc + orthanc-proxy) berjalan
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/pacs/orthanc
+# `up -d` idempotent: tidak melakukan apa pun bila container sudah jalan,
+# dan membuat ulang container bila terhapus (mis. tidak sengaja `compose down`).
+ExecStart=/usr/bin/docker compose up -d --remove-orphans
+TimeoutStartSec=300

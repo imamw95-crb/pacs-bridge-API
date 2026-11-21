@@ -5,3 +5,5 @@ Dockerfile text eol=lf
 *.sh text eol=lf
 deploy/cron-pacs-pull text eol=lf
 deploy/cron-pacs-notify text eol=lf
+# unit systemd & compose dijalankan di Linux: CRLF membuat ExecStart gagal
+deploy/orthanc/* text eol=lf

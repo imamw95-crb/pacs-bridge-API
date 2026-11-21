@@ -40,7 +40,7 @@ Ringkas di bawah; tabel lengkap per file: `docs/REF-LINGKUNGAN.md` §2.
 | `public/dashboard.html` | dashboard web (login, worklist, study, pengaturan) — tanpa build step |
 | `public/router.php` | router `php -S` (path ber-titik/UID DICOM tidak 404) |
 | `tools/` | `selftest`, `test-api-key`, `test-order-flow`, `test-users`, `test-ci-integration`, `pull-santesrv1`, `notify-studies`, `agent-map` |
-| `deploy/` | `deploy.sh`, `cron-pacs-pull`, `cron-pacs-notify`, `nginx-pacs-bridge.conf`, `README.md` |
+| `deploy/` | `deploy.sh`, `cron-pacs-pull`, `cron-pacs-notify`, `nginx-pacs-bridge.conf`, `README.md`; `orthanc/` = stack compose Orthanc di server (container `orthanc` + `orthanc-proxy`) + unit systemd `orthanc-compose.service` & watchdog tiap 2 menit |
 | `integrations/codeigniter/` | adapter CI3 + CI4 (mode A Bridge API / mode B Orthanc) |
 | `docs/` | `REF-*.md` (detail AGENTS.md), `API-KEY-SIMRS.html/pdf` |
 | `API.md` / `PACS-ORTHANC.md` | referensi REST API / temuan server (besar — grep dulu) |
@@ -54,7 +54,7 @@ Detail tiap alat (format accession PX, slice CT, alat IIS `192.168.10.110`): `do
 
 | Item | Nilai |
 |---|---|
-| Orthanc | `10.4.0.10`, container `orthanc`; DICOM **4242** AET `ORTHANC`, REST/DICOMweb **8042** |
+| Orthanc | `10.4.0.10`, container `orthanc` (dikelola `docker compose` di `/home/pacs/orthanc/docker-compose.yml`); DICOM **4242** AET `ORTHANC`, REST/DICOMweb **8042** |
 | Client | AET `LEAD_CLIENT`, IP `192.168.200.230:11112` (C-MOVE) |
 | Port 11112 server | milik `dicom-router` (AET `DCMROUTER`), **bukan** Orthanc |
 | Config server | `/tmp/orthanc.json` (generate dari `/etc/orthanc/*.json`) — jangan diedit |

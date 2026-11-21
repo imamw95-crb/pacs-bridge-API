@@ -1,0 +1,11 @@
+[Unit]
+Description=Cek stack Orthanc tiap 2 menit
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=2min
+AccuracySec=15s
+Unit=orthanc-compose-watchdog.service
+
+[Install]
+WantedBy=timers.target
