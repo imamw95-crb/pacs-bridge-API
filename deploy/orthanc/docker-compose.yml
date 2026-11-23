@@ -29,9 +29,15 @@ services:
     ports:
       - "4242:4242"   # DICOM SCP (AET ORTHANC)
       - "8042:8042"   # REST / DICOMweb
+    # Kredensial SIMRS tidak disimpan di repo: isi /home/pacs/orthanc/.env (chmod 600)
+    #   SIMRS_AUTH_USER=... / SIMRS_AUTH_PASS=...
     environment:
       TZ: Asia/Jakarta
       MALLOC_ARENA_MAX: "5"
+      PYTHON_PLUGIN_ENABLED: "true"
+      SIMRS_WORKLIST_URL: ${SIMRS_WORKLIST_URL:-http://10.4.0.22/simrs/index.php/radiologi/api_worklist_dx/mwl_today}
+      SIMRS_AUTH_USER: ${SIMRS_AUTH_USER:-}
+      SIMRS_AUTH_PASS: ${SIMRS_AUTH_PASS:-}
     volumes:
       - /etc/orthanc:/etc/orthanc                     # konfigurasi permanen (orthanc.json, worklists.json, lua)
       - orthanc-storage:/var/lib/orthanc/db           # database + storage study

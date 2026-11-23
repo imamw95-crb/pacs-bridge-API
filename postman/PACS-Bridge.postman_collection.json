@@ -299,7 +299,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"server_ip\": \"10.4.0.10\",\n  \"http_port\": 8042,\n  \"dicom_port\": 4242,\n  \"timeout\": 30,\n  \"called_aet\": \"ORTHANC\",\n  \"calling_aet\": \"LEAD_CLIENT\",\n  \"modality\": \"DX\",\n  \"client_ip\": \"192.168.200.230\",\n  \"study_filter\": \"today\"\n}",
+              "raw": "{\n  \"server_ip\": \"10.4.0.10\",\n  \"http_port\": 8042,\n  \"dicom_port\": 4242,\n  \"timeout\": 30,\n  \"called_aet\": \"ORTHANC\",\n  \"calling_aet\": \"LEAD_CLIENT\",\n  \"modality\": \"DX\",\n  \"client_ip\": \"10.4.0.10\",\n  \"study_filter\": \"today\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
