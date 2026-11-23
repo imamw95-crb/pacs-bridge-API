@@ -126,6 +126,11 @@ Hal yang mudah salah:
 - **Persistensi:** tanpa `"DicomModalitiesInDatabase": true` di `/etc/orthanc/orthanc.json`,
   modality hasil pendaftaran hilang setelah container Orthanc di-restart (daftar alat di
   Pengaturan tetap ada — tinggal klik **Daftarkan ke Orthanc** lagi).
+- **`DCMROUTER` dan `SANTESRV1` bukan alat**: `DCMROUTER` = **router Kemenkes**
+  (`10.4.0.10:11112`) dan `SANTESRV1` = PACS sumber cron. Keduanya muncul di daftar modality
+  Orthanc; jangan dimasukkan ke `worklist_devices` atau dipakai sebagai tujuan MWL
+  (C-FIND lewat `:11112` = 0 hasil). Alat DX (`LEAD_CLIENT`) menarik MWL ke
+  `10.4.0.10:4242` AET `ORTHANC`.
 - Jangan arahkan `Host` ke IP bridge/server sendiri; itu harus IP alat.
 - Tanpa pendaftaran, C-FIND MWL ditolak: `This AET is not listed in configuration option "DicomModalities"`.
   Pendaftaran manual di `/etc/orthanc/orthanc.json` tetap valid — wajib bila Orthanc tidak bisa

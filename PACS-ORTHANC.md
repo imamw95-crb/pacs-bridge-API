@@ -15,10 +15,10 @@ yang dipakai proyek ini. Semua angka di sini **hasil uji nyata** pada 13 Nov 202
 | DICOM SCP | port **4242**, AET **`ORTHANC`** |
 | REST / DICOMweb | port **8042** (HTTP) |
 | Proxy web | container `orthanc-proxy` (nginx) → `:8088` |
-| DICOM router | container `dicom-router-17apr2026` → port **11112**, AET `DCMROUTER` |
+| DICOM router | container `dicom-router-17apr2026` (**milik Kemenkes**) → port **11112**, AET `DCMROUTER`; **bukan** proxy MWL (C-FIND lewat sini = 0 hasil) |
 | Portainer | `:8000`, `:9443` |
 | Jumlah data | 16.131 study / 12.178 pasien / 24.945 series |
-| Modality terdaftar | `DCMROUTER`, `SANTESRV1`, **`LEAD_CLIENT`**, `VersanaB-000000` (USG) |
+| Modality terdaftar | `DCMROUTER` (router Kemenkes), `SANTESRV1` (PACS sumber), **`LEAD_CLIENT`** (DX `192.168.10.110`), `VersanaB-000000` (USG), `CT140643`, `LEAD_PHILIP` |
 
 Konfigurasi aktif di server (dipakai proses yang berjalan) ada di **`/tmp/orthanc.json`
 di dalam container**, dan file itu **di-generate ulang setiap start** oleh
@@ -38,7 +38,7 @@ di dalam container**, dan file itu **di-generate ulang setiap start** oleh
 ```
 MODALITY: DX
 SERVER NAME: LEAD_SERVER
-CLIENT IP: 192.168.200.230      # IP mesin yang menjalankan client (bukan IP server)
+CLIENT IP: 10.4.0.10            # placeholder 21 Nov 2026 (IP alat belum diketahui; dulu 192.168.200.230 = laptop)
 SERVER IP: 10.4.0.10            # IP Orthanc
 SERVER PORT: 4242               # port DICOM Orthanc
 CALLED AE TITLE: ORTHANC        # AET server
@@ -51,7 +51,11 @@ Aturan penting:
   Nilainya baru penting kalau server harus menghubungi client (C-ECHO balik, **C-MOVE**, storage commitment).
 - `CLIENT IP` = IP yang **didaftarkan di server** sebagai `Host` modality.
 - Jangan isi `CLIENT IP` dengan IP server: sudah diuji → C-ECHO dari Orthanc ke "client" gagal (HTTP 500),
-  karena `10.4.0.10:11112` milik container **dicom-router** (hanya menerima AET `DCMROUTER`).
+  karena `10.4.0.10:11112` milik container **dicom-router** (hanya menerima AET `DCMROUTER`; router ini **milik Kemenkes**, bukan proxy MWL).
+- **Pengecualian 21 Nov 2026**: karena IP alat DX belum diketahui, `CLIENT IP` + `Host` modality
+  `LEAD_CLIENT` diisi `10.4.0.10` sebagai *placeholder* (lihat §3.3). Akibatnya C-ECHO ke
+  `LEAD_CLIENT` memang 500 — itu wajar, bukan indikator alat mati. **22 Nov 2026:** IP alat DX
+  diketahui `192.168.10.110` (DICOM `104`) → `Host` perlu diubah ke nilai itu.
 
 ---
 
@@ -61,7 +65,7 @@ Aturan penting:
 
 | File | Perubahan |
 |---|---|
-| `orthanc.json` | tambah modality `LEAD_CLIENT` (AET `LEAD_CLIENT`, Host `192.168.200.230`, Port `11112`, Allow* = true) |
+| `orthanc.json` | tambah modality `LEAD_CLIENT` (AET `LEAD_CLIENT`, Host `192.168.200.230`, Port `11112`, Allow* = true) — **dihapus lalu didaftarkan ulang 21 Nov 2026, lihat §3.3** |
 | `orthanc.json` | tambah `"Worklists": { "Enable": true, "Database": "/var/lib/orthanc/worklists" }` |
 | `orthanc.json` | tambah `DicomAlwaysAllowEcho/Find/Store: true` (untuk masa uji) |
 | `worklists.json` | `"Enable": false` → `true` |
@@ -137,7 +141,51 @@ watchdog dipicu → `orthanc (healthy)` + `/system` 200 dalam ±20 detik.
 > Untuk maintenance yang memang ingin mematikan Orthanc:
 > `sudo systemctl stop orthanc-compose-watchdog.timer` dulu.
 
-### 3.3 Modality `LEAD_CLIENT` (didaftarkan juga via REST, permanen di config)
+### 3.2b Compose di server pernah **tidak valid** (diperbaiki 21 Nov 2026)
+
+Perubahan 20 Nov (env SIMRS + `PYTHON_PLUGIN_ENABLED`) **tidak pernah aktif**: file
+`/home/pacs/orthanc/docker-compose.yml` mencampur list-of-map dan string sehingga
+`docker compose up -d` gagal:
+
+```
+services.orthanc.environment.[0]: unexpected type map[string]interface {}
+```
+
+Perbaikan: `environment` jadi mapping, kredensial SIMRS dipindah ke
+`/home/pacs/orthanc/.env` (`chmod 600`, tidak masuk repo):
+
+```bash
+SIMRS_AUTH_USER=...
+SIMRS_AUTH_PASS=...
+```
+
+Setelah `sudo docker compose up -d` (21 Nov 10:16 WIB): container recreate,
+`healthy` dalam ±9 detik, `/system` 200, 6 modality utuh. Backup:
+`orthanc.json.bak-20261121-101543`, `docker-compose.yml.bak-20261121-101614`.
+
+### 3.2c Worklist SIMRS (Python) — **belum diaktifkan**
+
+`/etc/orthanc/orthanc.json` sempat memuat `"PythonScript": "/etc/orthanc/worklist_dx.py"`
+yang akan menarik MWL langsung dari SIMRS (`radiologi/api_worklist_dx/mwl_today`,
+filter per Calling AET). Dua masalah:
+
+| Masalah | Bukti |
+|---|---|
+| Path script salah | `/etc/orthanc/worklist_dx.py` **tidak ada**; file asli `/etc/orthanc/scripts/worklist_dx.py` |
+| Endpoint SIMRS belum ada | `GET …/radiologi/api_worklist_dx/mwl_today?aetitle=LEAD_CLIENT&today=1` → **HTTP 404** (CodeIgniter) |
+
+Karena callback Python **menimpa** sumber worklist, mengaktifkannya sekarang membuat alat
+DX dapat **0 order**. Jadi `PythonScript` dicabut dari config; MWL DX tetap dilayani
+plugin `orthanc-worklists` (DB `/var/lib/orthanc/worklists` → `POST /worklists` bridge).
+Env `SIMRS_*` sudah terpasang di container, siap dipakai begitu dua masalah di atas selesai.
+
+> Catatan: `"DicomModalitiesInDatabase": true` → modality dari `/etc/orthanc/orthanc.json`
+> di-seed ke DB tiap start, jadi `DELETE /modalities/{aet}` via REST **kembali** setelah
+> restart. Untuk menghapus permanen, hapus dari file config lalu recreate.
+
+### 3.3 Modality `LEAD_CLIENT` — permanen di config (21 Nov 2026)
+
+Awalnya terdaftar dengan Host `192.168.200.230:11112`:
 
 ```json
 "LEAD_CLIENT": {
@@ -147,6 +195,64 @@ watchdog dipicu → `orthanc (healthy)` + `/system` 200 dalam ±20 detik.
   "AllowStore": true, "AllowTranscoding": true
 }
 ```
+
+`192.168.200.230` ternyata **laptop kerja**, bukan alat (host hidup, port 445 terbuka,
+tetapi **11112 tertutup** → C-ECHO dari Orthanc selalu `TCP Initialization Error`),
+jadi entry itu dihapus:
+
+```bash
+curl -X DELETE http://10.4.0.10:8042/modalities/LEAD_CLIENT   # HTTP 200
+```
+
+`DELETE` dijawab **200** (bukan 400 "defined in the configuration file") karena entry
+itu memang hanya ada di DB pada saat itu, sedangkan `/etc/orthanc/orthanc.json` yang
+memuat `LEAD_CLIENT` (mtime 20 Nov 14:29) **belum pernah diterapkan** ke container yang
+berjalan (start 20 Nov 13:15) — lihat §3.2b.
+
+#### ⚠️ Efek samping: MWL jadi kosong untuk alat DX
+
+Sesudah dihapus, alat DX yang menarik worklist **tetap dapat `0x0000` tapi 0 order**.
+Penyebabnya: plugin `orthanc-worklists` hanya melayani **calling AE Title yang terdaftar
+di `DicomModalities`**. Hasil uji 21 Nov 2026 (1 order DX `SCHEDULED` di DB):
+
+| Calling AET | Hasil C-FIND MWL |
+|---|---|
+| `LEAD_CLIENT` (sudah dihapus) | **0** |
+| `UNKNOWN_AE` | **0** |
+| `VersanaB-000000`, `CT140643`, `DCMROUTER` (terdaftar) | **1** |
+| `TESTAET` (didaftarkan sementara) | **1** |
+
+Jadi **menghapus modality = mematikan MWL untuk AET itu**. Order tetap terlihat di
+dashboard (`GET /worklists`) karena itu REST, bukan DICOM.
+
+#### Keadaan sekarang
+
+Permanen di `/etc/orthanc/orthanc.json` (bukan hanya DB), Host bukan laptop:
+
+```json
+"LEAD_CLIENT": { "AET": "LEAD_CLIENT", "Host": "10.4.0.10", "Port": 11112, ... }
+```
+
+Sudah diverifikasi setelah `docker compose up -d` (21 Nov 10:16 WIB):
+
+- `GET /modalities/LEAD_CLIENT/configuration` → Host `10.4.0.10`, Port `11112`.
+- `POST /worklists` (DX, station `LEAD_CLIENT`) → 201; C-FIND MWL sebagai
+  `LEAD_CLIENT` → `AC` + order muncul; order uji lalu dihapus.
+- Host/Port hanya dipakai untuk koneksi **keluar** (C-ECHO balik / C-MOVE) — MWL tidak
+  terpengaruh. Ganti nilainya begitu IP alat DX sebenarnya diketahui.
+- **Hati-hati**: menyimpan Pengaturan / klik **Daftarkan ke Orthanc** dari dashboard
+  menulis ulang `Host` modality sesuai isi kolom "IP / host alat". Pada 21 Nov 10:18
+  simpanan lama (masih `192.168.200.230`) sempat menimpa Orthanc; sudah dikembalikan ke
+  `10.4.0.10` dan `data/settings.json` produksi ikut diperbaiki.
+- `POST /modalities/LEAD_CLIENT/echo` sekarang **500** (`DUL Association Rejected`,
+  dicom-router hanya menerima AET `DCMROUTER`). Itu wajar untuk placeholder ini —
+  jangan dipakai sebagai penilaian "alat terjangkau".
+- MWL lewat dicom-router (`10.4.0.10:11112`) tetap **0 hasil** untuk semua calling AET
+  → router itu **milik Kemenkes** dan bukan proxy MWL ke Orthanc; alat harus tarik MWL ke `ORTHANC:4242`.
+- **22 Nov 2026**: IP alat DX diketahui **`192.168.10.110`** (DICOM `104`). `Host`/`Port`
+  modality `LEAD_CLIENT` di Orthanc masih placeholder `10.4.0.10:11112` → ubah via Pengaturan
+  (isi IP alat) lalu **Daftarkan ke Orthanc** supaya C-ECHO/C-MOVE ke alat berfungsi.
+  MWL tidak terpengaruh selama calling AET tetap `LEAD_CLIENT` dan terdaftar.
 
 ---
 
@@ -179,7 +285,7 @@ watchdog dipicu → `orthanc (healthy)` + `/system` 200 dalam ±20 detik.
 | Verifikasi koneksi | client → server | `1.2.840.10008.1.1` (C-ECHO) |
 | Ambil data pasien | client → server | `1.2.840.10008.5.1.4.31` (MWL C-FIND) |
 | Kirim gambar | client → server | DX Image Storage `1.2.840.10008.5.1.4.1.1.1.1` |
-| Ambil gambar (push) | server → client | C-MOVE, tujuan AET `LEAD_CLIENT` @ `192.168.200.230:11112` |
+| Ambil gambar (push) | server → client | C-MOVE, tujuan AET `LEAD_CLIENT` — Host kini placeholder `10.4.0.10:11112` dan router menolak AET `LEAD_CLIENT`, jadi **belum tersedia** (§3.3) |
 | Cari study | client → server | Study Root C-FIND `1.2.840.10008.5.1.4.1.2.2.1` |
 
 ---
@@ -313,7 +419,7 @@ Invoke-WebRequest $url -OutFile "C:\temp\hasil.jpg"
 
 ### 8.4 C-MOVE (retrieval DICOM ke alat)
 
-- Sudah diuji: Orthanc menghubungi `192.168.200.230:11112` (AET `LEAD_CLIENT`) dan mengirim 1 gambar DX 12,5 MB — status `0x0000`.
+- Sudah diuji (13 Nov 2026, saat modality masih menunjuk laptop): Orthanc menghubungi `192.168.200.230:11112` (AET `LEAD_CLIENT`) dan mengirim 1 gambar DX 12,5 MB — status `0x0000`. Setelah didaftarkan ulang 21 Nov 2026 (§3.3) C-MOVE ke `LEAD_CLIENT` belum bisa: Host placeholder `10.4.0.10:11112` dan router menolak AET itu.
 - Syarat: alat **listen** di port `11112` dan port itu terbuka di firewall; modality terdaftar dengan `AllowMove/AllowStore`.
 - **C-GET ditolak** Orthanc (`0xA702`) → jangan dipakai.
 

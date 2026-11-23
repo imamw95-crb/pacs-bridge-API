@@ -60,13 +60,13 @@
 | Server Orthanc | `10.4.0.10` (Docker container `orthanc`, Orthanc 1.12.11) |
 | DICOM SCP | port **4242**, AET **`ORTHANC`** |
 | REST / DICOMweb | port **8042** |
-| AET client | **`LEAD_CLIENT`** (modality `DX`) |
-| IP client | `192.168.200.230` (port lokal `11112` untuk C-MOVE) |
+| AET client | **`LEAD_CLIENT`** (modality `DX`, alat di `192.168.10.110`) |
+| IP client (alat DX) | **`192.168.10.110`** (Rontgen, DICOM port `104`); `192.168.200.230:11112` = laptop kerja, bukan alat. `Host` modality `LEAD_CLIENT` di Orthanc masih placeholder `10.4.0.10:11112` |
 | Config aktif di server | `/tmp/orthanc.json` — **di-generate** dari `/etc/orthanc/*.json` |
 | `DicomModalitiesInDatabase` | **belum diset** (= `false`) → modality yang didaftarkan via REST hanya di memori dan **hilang saat Orthanc restart**; set `"DicomModalitiesInDatabase": true` di `/etc/orthanc/orthanc.json` + `docker restart orthanc` agar permanen |
-| Port 11112 di server | milik container `dicom-router` (AET `DCMROUTER`), **bukan** Orthanc |
+| Port 11112 di server | milik container `dicom-router` (AET `DCMROUTER`) = **router Kemenkes**, **bukan** Orthanc; C-FIND MWL lewat sini selalu 0 hasil |
 | PACS sumber (ditarik cron) | **`192.168.10.15:11121`**, AET `SANTESRV1`, `RetrieveMethod = C-GET` |
-| `192.168.10.110` | mesin Windows (IIS 10) dengan DICOM di port 104; **menolak** AET pemanggil yang tidak terdaftar (`reason 0x03`) — belum bisa dipakai sebagai sumber |
+| Alat DX (Rontgen) | IP **`192.168.10.110`** — mesin Windows (IIS 10) dengan DICOM di port `104`; menarik MWL dari `10.4.0.10:4242` AET `ORTHANC` dengan calling AET `LEAD_CLIENT` (harus terdaftar di `DicomModalities`, kalau tidak → 0 hasil). **Menolak** AET pemanggil yang tidak terdaftar (`reason 0x03`) — jangan dipakai sebagai sumber tarikan |
 | Alat USG (GE Versana Balance) | IP `192.168.10.130`, AET **`VersanaB-000000`**, modality `US`, StationName `DESKTOP-I6P3F1V`; study dikirim **tanpa AccessionNumber**. Terdaftar di `DicomModalities` (AllowFindWorklist + AllowStore) sejak 17 Nov 2026 |
 | Alat EKG (Philips, ECG cart) | IP **`172.16.200.137`**, AET **`LEAD_PHILIP`**, modality `ECG`; MWL diarahkan ke `10.4.0.10:4242`. Terdaftar di `DicomModalities` (AllowFindWorklist + AllowStore) 17 Nov 2026. **Setelan alat**: `Local AE` harus `LEAD_PHILIP` (bukan `ORTHANC`) dan AE server MWL `ORTHANC` — kalau tertukar, C-FIND MWL ditolak karena AET `ORTHANC` bukan modality terdaftar |
 | Alat panoramic gigi (Myer / Meyer) | Manufacturer `MEYER`, modality **`PX`**, SeriesDescription `_myct__type=PAN_` (mis. study `1.9.0.415.0.519.551.…`). Mengirim **C-STORE** ke Orthanc (tanpa MWL); AccessionNumber = tanggal+jam dari alat (`20261114120308`), `PatientName` memakai garis bawah (`NEYSHA_RULIA_WATI_AN`). Citra **tidak** memuat identitas pasien, jadi JPG-nya **tetap diberi watermark** |

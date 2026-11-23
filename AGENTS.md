@@ -55,9 +55,9 @@ Detail tiap alat (format accession PX, slice CT, alat IIS `192.168.10.110`): `do
 | Item | Nilai |
 |---|---|
 | Orthanc | `10.4.0.10`, container `orthanc` (dikelola `docker compose` di `/home/pacs/orthanc/docker-compose.yml`); DICOM **4242** AET `ORTHANC`, REST/DICOMweb **8042** |
-| Client | AET `LEAD_CLIENT`, IP `192.168.200.230:11112` (C-MOVE) |
-| Port 11112 server | milik `dicom-router` (AET `DCMROUTER`), **bukan** Orthanc |
-| Config server | `/tmp/orthanc.json` (generate dari `/etc/orthanc/*.json`) — jangan diedit |
+| Client | AET `LEAD_CLIENT` (calling AET **dan** `ScheduledStationAETitle` DX), alat DX = `192.168.10.110` (DICOM `104`); MWL wajib ke `10.4.0.10:4242` AET `ORTHANC` — modality wajib terdaftar |
+| Port 11112 server | milik `dicom-router` (AET `DCMROUTER`) = **router Kemenkes**, bukan Orthanc; C-FIND MWL lewat sini selalu 0 hasil |
+| Config server | `/tmp/orthanc.json` (generate dari `/etc/orthanc/*.json`) — jangan diedit; `DicomModalitiesInDatabase: true` → modality config di-seed ke DB tiap start |
 | PACS sumber (cron) | `192.168.10.15:11121`, AET `SANTESRV1`, `RetrieveMethod = C-GET` |
 | Bridge produksi | `http://10.4.0.10/`, container `pacs-bridge`, kode `/opt/pacs-bridge` |
 
@@ -65,11 +65,14 @@ Alat terdaftar (`DicomModalities` + `worklist_devices`):
 
 | Alat | AET | Modality | IP |
 |---|---|---|---|
-| Rontgen | `LEAD_CLIENT` | `DX` | — |
+| Rontgen | `LEAD_CLIENT` | `DX` | `192.168.10.110` |
 | USG GE Versana | `VersanaB-000000` | `US` | `192.168.10.130` |
 | EKG Philips | `LEAD_PHILIP` | `ECG` | `172.16.200.137` |
 | CT Siemens | `CT140643` | `CT` | `192.168.10.19:104` |
 | Panoramic Meyer | (C-STORE saja) | `PX` | — |
+
+`DCMROUTER` (router Kemenkes) dan `SANTESRV1` (PACS sumber cron) juga ada di
+`DicomModalities`, tetapi **bukan alat** — jangan dipakai sebagai tujuan MWL.
 
 Override env: `PACS_SERVER_IP`, `PACS_HTTP_PORT`, `PACS_DICOM_PORT`, `PACS_CALLED_AET`,
 `PACS_CALLING_AET`, `PACS_MODALITY`, `PACS_HTTP_USER`, `PACS_HTTP_PASS`, `PACS_BRIDGE_KEY`,
@@ -86,6 +89,8 @@ Override env: `PACS_SERVER_IP`, `PACS_HTTP_PORT`, `PACS_DICOM_PORT`, `PACS_CALLE
 - `ScheduledProcedureStepStatus = SCHEDULED` (`0040,0020`) — Siemens `CT140643` memfilternya; tanpa itu order tak muncul.
 - `modality` per order **tidak dibatasi DX** (DX/CT/US/ECG/PX) + `station_aet`; `MODALITY` di config hanya default.
 - Alat baru: daftarkan di Orthanc (`DicomModalities` + `AllowFindWorklist`, lewat dashboard → lihat `docs/REF-DASHBOARD.md` §6.9) **dan** di `worklist_devices`.
+- Plugin MWL hanya melayani **calling AET yang terdaftar di `DicomModalities`**; AET tak terdaftar tetap dapat `0x0000` tapi **0 order** (order tetap tampil di dashboard karena `GET /worklists` itu REST). Jadi **jangan hapus modality** yang dipakai menarik MWL.
+- Sumber MWL DX saat ini **DB bridge** (`POST /worklists`). Integrasi SIMRS (`worklist_dx.py` via `PythonScript`) **belum aktif**: path script salah & endpoint `…/api_worklist_dx/mwl_today` masih 404 — lihat `PACS-ORTHANC.md` §3.2c.
 - Pastikan AET alat dengan `dicom-probe.py` (`AC` = benar, `RJ reason=0x03/0x07` = salah); jangan menebak dari `StationName`.
 - `PatientName` **tanpa koma** (`PatientName::safe()`): `TARYA BIN WARDI TN`.
 - `POST /worklists` idempotent per `accession_number` (201 baru / 200 sama / 409 `ACCESSION_CONFLICT` milik pasien lain).

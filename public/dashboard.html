@@ -492,7 +492,7 @@
           <div><label for="sCalled">Called AE Title (server)</label><input id="sCalled" placeholder="ORTHANC"></div>
           <div><label for="sCalling">Calling AE Title (client)</label><input id="sCalling" placeholder="LEAD_CLIENT"></div>
           <div><label for="sModality">Modality</label><input id="sModality" placeholder="DX"></div>
-          <div><label for="sClientIp">Client IP</label><input id="sClientIp" placeholder="192.168.200.230"></div>
+          <div><label for="sClientIp">Client IP</label><input id="sClientIp" placeholder="10.4.0.10"></div>
         </div>
       </div>
 
@@ -780,6 +780,9 @@ let pendingClearCallback = false;
     CR: 'CR', MG: 'Mammografi', MR: 'MRI', NM: 'Kedokteran Nuklir'
   };
   const DEFAULT_MODALITIES = ['DX', 'CT', 'US', 'ECG', 'PX'];
+
+  // Modality infrastruktur (bukan alat): jangan dipakai sebagai tujuan MWL / worklist_devices.
+  const INFRA_MODALITIES = { DCMROUTER: 'router Kemenkes', SANTESRV1: 'PACS sumber' };
   // Modalitas yang citranya sudah memuat identitas pasien dari alat → tanpa watermark
   // (harus sama dengan StudyService::NO_WATERMARK_MODALITIES di server).
   const NO_WATERMARK_MODALITIES = ['US', 'ECG'];
@@ -1568,7 +1571,7 @@ let pendingClearCallback = false;
       if (note) {
         note.textContent = res.reachable
           ? 'Orthanc: ' + (res.modalities || []).length + ' modality terdaftar'
-            + ((res.modalities || []).length ? ' — ' + (res.modalities || []).map((m) => m.id).join(', ') : '') + '.'
+            + ((res.modalities || []).length ? ' — ' + (res.modalities || []).map((m) => m.id + (INFRA_MODALITIES[m.id] ? ' (' + INFRA_MODALITIES[m.id] + ')' : '')).join(', ') : '') + '.'
           : 'Status Orthanc tidak terbaca: ' + (res.error || 'tidak diketahui');
       }
     } catch (e) {
