@@ -3,7 +3,7 @@
 Menghubungkan SIMRS (PHP) dengan Orthanc PACS: kirim order ke **MWL** (ditarik alat radiologi)
 dan ambil hasil study (DICOM/JPG/PNG/ZIP). Modality utama `DX`, AET client `LEAD_CLIENT`.
 
-> **File ini sengaja ringkas** (±170 baris, ±10 KB). Detail per topik ada di
+> **File ini sengaja ringkas** (±195 baris, ±15 KB). Detail per topik ada di
 > `docs/REF-*.md` dan dibaca **hanya** bila topik itu disentuh. Jangan menambah penjelasan
 > panjang di sini — taruh di `docs/REF-*` lalu tambahkan satu baris di §8.
 
@@ -17,6 +17,7 @@ dan ambil hasil study (DICOM/JPG/PNG/ZIP). Modality utama `DX`, AET client `LEAD
 | Output panjang (lint, test, log, docker) | batasi: `-First 20`, `-Tail 50`, `--quiet` |
 | `PACS-ORTHANC.md` (472 baris), `API.md` (1004 baris) | jangan dimuat utuh — grep kata kunci dulu |
 | Edit | pakai `edit` (jangan tulis ulang file besar) |
+| Diminta mendiagnosis "kok gagal?" (C-ECHO, gambar, model AI, config) | baca **§9 Jebakan** dulu — banyak yang bukan bug kode |
 
 ## 1. Alur data
 
@@ -139,6 +140,11 @@ php tools/pull-santesrv1.php --dry-run               # tarikan SANTESRV1
 php tools/notify-studies.php --latest --dry-run      # pratinjau callback
 Get-ChildItem -Recurse -Filter *.php | ForEach-Object { php -l $_.FullName }
 python dicom-probe.py 10.4.0.10 4242 ORTHANC <AET_ALAT>
+
+# deploy live 10.4.0.10 (password JANGAN disimpan di repo; isi <PASS> saat menjalankan)
+tar -czf %TEMP%\pacs-bridge-deploy.tar.gz src public tools integrations postman docs deploy setting.txt Dockerfile .dockerignore AGENTS.md API.md PACS-ORTHANC.md
+pscp -pw <PASS> %TEMP%\pacs-bridge-deploy.tar.gz pacs@10.4.0.10:/tmp/pacs-bridge-deploy.tar.gz
+plink -pw <PASS> pacs@10.4.0.10 "echo '<PASS>' | sudo -S -v && sudo tar xzf /tmp/pacs-bridge-deploy.tar.gz -C /opt/pacs-bridge && sudo bash /opt/pacs-bridge/deploy/deploy.sh /tmp/pacs-bridge-deploy.tar.gz"
 ```
 
 Deploy, rollback, cron, dan verifikasi versi: `deploy/README.md` + `docs/REF-DEPLOY.md`.
@@ -147,12 +153,11 @@ Di Laragon: docroot → folder `public/`.
 ## 6. Validasi setelah perubahan
 
 1. `php -l` bersih untuk file yang diubah.
-2. Perubahan inti/SDK → `php tools/selftest.php` **8 pass, 0 fail**.
-3. Order/status/audit → `tools/test-order-flow.php` **8 pass** (idempotensi, 409, `sent`→`cancelled`, 404, `/audit` 403 untuk key).
-4. Auth/user → `tools/test-users.php` **19 pass**; integrasi CI → `tools/test-ci-integration.php` **9 pass**.
-5. Auto expertise/Ollama → `tools/test-expertise.php <baseUrl> <API_KEY>` **7 pass** (draf dihapus otomatis).
-6. Endpoint: `/health` 200, `/studies/{acc}/jpg` → `image/jpeg`.
-7. Tidak meninggalkan order/user uji. Detail: `docs/REF-OPERASIONAL.md` §8.
+2. Inti/SDK → `php tools/selftest.php` **8 pass**; order/status/audit → `tools/test-order-flow.php` **8 pass**.
+3. Auth/user → `tools/test-users.php` **19 pass**; integrasi CI → `tools/test-ci-integration.php` **9 pass**.
+4. Auto expertise/Ollama → `tools/test-expertise.php <baseUrl> <API_KEY>` **7 pass** (draf dihapus otomatis).
+5. Endpoint: `/health` 200, `/studies/{acc}/jpg` → `image/jpeg`, `/audit` tanpa sesi `401 UNAUTHORIZED`.
+6. Tidak meninggalkan order/user/draf uji — order uji selalu dihapus. Detail: `docs/REF-OPERASIONAL.md` §8.
 
 ## 7. Konvensi & keamanan
 
@@ -175,3 +180,16 @@ Di Laragon: docroot → folder `public/`.
 | Referensi REST API lengkap | `API.md` |
 | Temuan/quirk server PACS | `PACS-ORTHANC.md` |
 | Dokumentasi API key untuk tim SIMRS | `docs/API-KEY-SIMRS.pdf` (sumber `.html`) |
+
+## 9. Jebakan yang sering bikin salah simpul
+
+- **C-ECHO gagal ≠ bridge rusak** — `Host` `LEAD_CLIENT` masih `10.4.0.10:11112` (dicom-router) → `DUL Association Rejected`; alat DX hanya SCU (tanpa listener DICOM). Detail: `docs/REF-LINGKUNGAN.md` §3. MWL/C-STORE normal.
+- **Jangan menebak AET/port alat** — uji dengan `dicom-probe.py` (`AC` benar, `RJ 0x03/0x07` salah); jangan isi IP server sebagai IP alat.
+- **Model Ollama tak ikut deploy** — `ollama_model` ada di `data/settings.json` (runtime, di luar paket); ubah via dashboard → Auto Expertise atau edit di server.
+- **`/api/tags` bisa tak lengkap** — Ollama 0.33.x tak menyebut `vision` untuk `medgemma:4b`; `status()` fallback ke `/api/show`. Cek `/ollama/status` dulu.
+- **Semua fitur = REST API** — dashboard `api()` + sesi, SIMRS `BridgeApiClient` + `X-API-Key`; worker cron pakai SDK langsung (jangan bikin endpoint baru).
+- **Verifikasi live** — versi dari `<meta name="bridge-version">` di `/dashboard`; `/audit` tanpa sesi harus `401 UNAUTHORIZED`.
+- **Prioritas config** — env `PACS_*` > `setting.txt` > `data/settings.json`; cek nilai efektif dengan `Config::load()`.
+- **Dokumentasi ikut berubah** — fitur baru → `README.md` §Fitur + `API.md`/`docs/REF-API.md`; `API-KEY-SIMRS.html` berubah → cetak ulang PDF.
+- **Data uji wajib bersih** — order/user/draf expertise uji dihapus; kalau user minta "nanti", catat di jawaban akhir.
+- **Kredensial** — jangan simpan token/password di repo, log, atau `.git/config`; token yang tampil di chat → minta user rotate.

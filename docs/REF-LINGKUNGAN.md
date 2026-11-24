@@ -72,8 +72,9 @@
 | AET client | **`LEAD_CLIENT`** (modality `DX`, alat di `192.168.10.110`) |
 | IP client (alat DX) | **`192.168.10.110`** (Rontgen, DICOM port `104`); `192.168.200.230:11112` = laptop kerja, bukan alat. `Host` modality `LEAD_CLIENT` di Orthanc masih placeholder `10.4.0.10:11112` |
 | Config aktif di server | `/tmp/orthanc.json` — **di-generate** dari `/etc/orthanc/*.json` |
-| `DicomModalitiesInDatabase` | **belum diset** (= `false`) → modality yang didaftarkan via REST hanya di memori dan **hilang saat Orthanc restart**; set `"DicomModalitiesInDatabase": true` di `/etc/orthanc/orthanc.json` + `docker restart orthanc` agar permanen |
+| `DicomModalitiesInDatabase` | **`true`** (sejak 21 Nov 2026, `/etc/orthanc/orthanc.json`) → modality yang didaftarkan via REST **bertahan** setelah Orthanc restart; config di-seed ke DB tiap start |
 | Port 11112 di server | milik container `dicom-router` (AET `DCMROUTER`) = **router Kemenkes**, **bukan** Orthanc; C-FIND MWL lewat sini selalu 0 hasil |
+| C-ECHO ke alat DX | **Tidak bisa** — workstation DX hanya SCU (tanpa listener DICOM). Scan 24 Nov 2026: TCP 104/105/1000/4006/4242/11112/… di `192.168.10.110` dan `192.168.200.230` **tertutup** (ping tetap OK). Karena `Host` modality masih placeholder `10.4.0.10:11112`, C-ECHO dari dashboard/Orthanc berakhir `DUL Association Rejected`. Alur MWL + C-STORE **tidak terpengaruh**; jangan "memperbaiki" dengan mengisi IP server sebagai IP alat |
 | PACS sumber (ditarik cron) | **`192.168.10.15:11121`**, AET `SANTESRV1`, `RetrieveMethod = C-GET` |
 | Alat DX (Rontgen) | IP **`192.168.10.110`** — mesin Windows (IIS 10) dengan DICOM di port `104`; menarik MWL dari `10.4.0.10:4242` AET `ORTHANC` dengan calling AET `LEAD_CLIENT` (harus terdaftar di `DicomModalities`, kalau tidak → 0 hasil). **Menolak** AET pemanggil yang tidak terdaftar (`reason 0x03`) — jangan dipakai sebagai sumber tarikan |
 | Alat USG (GE Versana Balance) | IP `192.168.10.130`, AET **`VersanaB-000000`**, modality `US`, StationName `DESKTOP-I6P3F1V`; study dikirim **tanpa AccessionNumber**. Terdaftar di `DicomModalities` (AllowFindWorklist + AllowStore) sejak 17 Nov 2026 |
