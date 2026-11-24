@@ -104,6 +104,7 @@ Override env: `PACS_SERVER_IP`, `PACS_HTTP_PORT`, `PACS_DICOM_PORT`, `PACS_CALLE
 - Render: `/instances/{id}/rendered?width=` (PNG) atau DICOMweb `.../rendered?quality=` (JPEG). `width` di DICOMweb **diabaikan**.
 - Daftar study terbaru: kirim **`OrderBy`** di `POST /tools/find`; jangan `Limit` lalu urutkan di PHP (data terbaru bisa hilang).
 - Nama file di ZIP JPG harus unik (`StudyService::uniqueFileName()`).
+- Thumbnail & "Lihat gambar" memakai **satu** instance (`StudyService::firstInstance()`); untuk `US` dipilih instance **berwarna** (Color/Power Doppler, `SamplesPerPixel` ≥ 3 via QIDO `includefield=00280002,00280004`) lebih dulu supaya tidak selalu tampil B-mode — jangan "diperbaiki" jadi instance pertama lagi.
 - Watermark: `src/WatermarkService.php` (GD + FreeType, orange). **Dilewati** untuk `US`/`ECG`; `PX` & `CT` tetap di-watermark.
 - Modality study diambil dari seri (`StudyService::attachModalities()`), bukan `MainDicomTags` study.
 - Study bisa **tanpa AccessionNumber** → `findOneByKey()` (acc → ID Orthanc → UID); dashboard memakai ID Orthanc.

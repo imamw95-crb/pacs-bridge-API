@@ -59,7 +59,9 @@
 - pencarian study by accession / No. RM / **nama pasien** (parsial, mis. `adi watik`), grid thumbnail (PNG 320px), tombol **Lihat**
   (viewer memakai gambar **ber-watermark dari server**: kiri `NAMA, SEX, DD/MM/YYYY` /
   `Pemeriksaan, DD/MM/YYYY` / `No. RM`, kanan `InstitutionName` + `ReferringPhysicianName`,
-  tanpa nomor accession — **kecuali modalitas US/USG & ECG/EKG yang tampil tanpa watermark**),
+  tanpa nomor accession — **kecuali modalitas US/USG & ECG/EKG yang tampil tanpa watermark**;
+  untuk **US/USG** yang dipilih adalah instance **berwarna** (Color/Power Doppler, `SamplesPerPixel` ≥ 3)
+  pertama bila ada, jadi thumbnail/"Lihat gambar" tidak selalu menampilkan B-mode),
   plus **Unduh JPG** (`jpg?watermark=1`), **Unduh ZIP (JPG)** (`/studies/{acc}/zip-jpg`),
   dan **ZIP DICOM**); pratinjau **hampir penuh layar** (`width: min(1680px,98vw)`, `height: min(94vh,1080px)`,
   header & caption tipis supaya area gambar maksimal) dan bisa **di-zoom**: scroll/pinch atau tombol −/+/Fit

@@ -173,6 +173,52 @@ final class OrthancClient
     }
 
     /**
+     * Daftar instance satu seri beserta status berwarna (QIDO-RS).
+     *
+     * Cukup satu request per seri; `SamplesPerPixel` & `PhotometricInterpretation`
+     * diminta lewat `includefield`. Dipakai untuk memilih gambar Color/Power
+     * Doppler pada modalitas US (satu study bisa campur B-mode & berwarna).
+     *
+     * @return list<array{sop_instance_uid: string, berwarna: bool}>
+     */
+    public function instanceColorInfo(string $studyUid, string $seriesUid): array
+    {
+        $path = $this->withQuery(
+            sprintf(
+                '/dicom-web/studies/%s/series/%s/instances',
+                rawurlencode($studyUid),
+                rawurlencode($seriesUid)
+            ),
+            ['includefield' => '00280002,00280004']
+        );
+
+        $items = $this->json('GET', $path);
+        $out = [];
+        foreach ($items as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+
+            $uid = (string) ($item['00080018']['Value'][0] ?? '');
+            if ($uid === '') {
+                continue;
+            }
+
+            $samples = (int) ($item['00280002']['Value'][0] ?? 0);
+            $photometric = strtoupper((string) ($item['00280004']['Value'][0] ?? ''));
+            $out[] = [
+                'sop_instance_uid' => $uid,
+                'berwarna'         => $samples >= 3
+                    || str_starts_with($photometric, 'RGB')
+                    || str_starts_with($photometric, 'YBR')
+                    || str_starts_with($photometric, 'PALETTE'),
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
      * @return list<string>
      */
     public function studyInstances(string $studyId): array

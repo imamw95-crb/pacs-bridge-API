@@ -35,6 +35,15 @@ final class StudyService
      */
     private const NO_WATERMARK_MODALITIES = ['US', 'ECG'];
 
+    /**
+     * Modalitas yang satu study-nya bercampur B-mode (MONOCHROME2, abu-abu) dan
+     * Color/Power Doppler (RGB). Thumbnail & "Lihat gambar" hanya menampilkan
+     * satu instance, jadi untuk modalitas ini dipilih instance berwarna lebih dulu.
+     *
+     * @var list<string>
+     */
+    private const COLOR_PREFERRED_MODALITIES = ['US'];
+
     /** @var array<string, array<string, string>> memo peta modalitas per tanggal (Ymd) */
     private array $modalityDateMemo = [];
 
@@ -408,13 +417,16 @@ final class StudyService
     /**
      * Ambil UID study/series/instance dari sebuah study Orthanc.
      *
+     * Untuk modalitas US, instance berwarna (Color/Power Doppler) dipilih lebih
+     * dulu supaya thumbnail & "Lihat gambar" tidak selalu menampilkan B-mode.
+     *
      * @return array{study_uid: string, series_uid: string, instance_uid: string, instance_id: string, modality: string}|null
      */
     public function firstInstance(string $studyId): ?array
     {
         $study = $this->client->study($studyId);
         $seriesIds = $study['Series'] ?? [];
-        $studyUid = $study['MainDicomTags']['StudyInstanceUID'] ?? '';
+        $studyUid = (string) ($study['MainDicomTags']['StudyInstanceUID'] ?? '');
         if (!is_array($seriesIds) || $seriesIds === [] || $studyUid === '') {
             return null;
         }
@@ -425,16 +437,85 @@ final class StudyService
             return null;
         }
 
+        $modality = strtoupper(trim((string) ($series['MainDicomTags']['Modality'] ?? '')));
+        if (in_array($modality, self::COLOR_PREFERRED_MODALITIES, true)) {
+            $warna = $this->firstColorInstance($studyUid, array_map('strval', $seriesIds));
+            if ($warna !== null) {
+                return $warna;
+            }
+        }
+
         $instanceId = (string) $instanceIds[0];
         $instance = $this->client->instance($instanceId);
 
         return [
-            'study_uid'   => (string) $studyUid,
+            'study_uid'   => $studyUid,
             'series_uid'  => (string) ($series['MainDicomTags']['SeriesInstanceUID'] ?? ''),
             'instance_uid'=> (string) ($instance['MainDicomTags']['SOPInstanceUID'] ?? ''),
             'instance_id' => $instanceId,
-            'modality'    => strtoupper(trim((string) ($series['MainDicomTags']['Modality'] ?? ''))),
+            'modality'    => $modality,
         ];
+    }
+
+    /**
+     * Instance berwarna (mis. Color Doppler) pertama di dalam satu study.
+     *
+     * @param list<string> $seriesIds
+     * @return array{study_uid: string, series_uid: string, instance_uid: string, instance_id: string, modality: string}|null
+     */
+    private function firstColorInstance(string $studyUid, array $seriesIds): ?array
+    {
+        foreach ($seriesIds as $seriesId) {
+            try {
+                $series = $this->client->series($seriesId);
+                $seriesUid = (string) ($series['MainDicomTags']['SeriesInstanceUID'] ?? '');
+                if ($seriesUid === '') {
+                    continue;
+                }
+                $items = $this->client->instanceColorInfo($studyUid, $seriesUid);
+            } catch (OrthancException) {
+                // DICOMweb tidak tersedia: pakai instance pertama (perilaku lama).
+                return null;
+            }
+
+            foreach ($items as $item) {
+                if (!$item['berwarna']) {
+                    continue;
+                }
+                $instanceId = $this->instanceIdByUid($item['sop_instance_uid']);
+                if ($instanceId === null) {
+                    continue;
+                }
+
+                return [
+                    'study_uid'    => $studyUid,
+                    'series_uid'   => $seriesUid,
+                    'instance_uid' => $item['sop_instance_uid'],
+                    'instance_id'  => $instanceId,
+                    'modality'     => strtoupper(trim((string) ($series['MainDicomTags']['Modality'] ?? ''))),
+                ];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * ID Orthanc sebuah SOPInstanceUID (path REST 1.12 tidak menerima UID).
+     */
+    private function instanceIdByUid(string $sopInstanceUid): ?string
+    {
+        try {
+            foreach ($this->client->lookup($sopInstanceUid) as $found) {
+                if (($found['Type'] ?? '') === 'Instance' && isset($found['ID'])) {
+                    return (string) $found['ID'];
+                }
+            }
+        } catch (OrthancException) {
+            return null;
+        }
+
+        return null;
     }
 
     /**
