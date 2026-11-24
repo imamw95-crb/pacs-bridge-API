@@ -108,6 +108,10 @@ php tools/notify-studies.php --latest
 # self-test peran user (manager vs operator) — membuat & menghapus user uji
 php tools/test-users.php http://127.0.0.1:8081 admin admin
 
+# self-test auto expertise Ollama (membuat draf lalu menghapusnya; butuh ollama_enabled=true)
+php tools/test-expertise.php http://127.0.0.1:8081 <API_KEY>
+php tools/test-expertise.php http://127.0.0.1:8081 <API_KEY> <ACCESSION> --keep
+
 # jalankan API dev (router wajib: path ber-titik seperti UID DICOM)
 php -S 0.0.0.0:8081 -t public public/router.php
 # -> http://127.0.0.1:8081/  (dashboard, login admin/admin)
@@ -149,3 +153,7 @@ Di Laragon: arahkan docroot ke folder `public/`.
    **Daftarkan ke Orthanc** → badge berubah "Terdaftar di Orthanc" dan `GET /modalities` menampilkan AET itu.
    **Wajib bersih-bersih:** `curl -X DELETE http://10.4.0.10:8042/modalities/TESTG2`, hapus baris alat
    di Pengaturan, dan pastikan `GET /modalities` kembali ke daftar asli.
+10. Perubahan pada auto expertise/Ollama: `php tools/test-expertise.php <baseUrl> <API_KEY>` → **7 pass**
+    (`GET /ollama/status` reachable + model vision, `POST` menghasilkan draf berisi kesan/temuan,
+    draf tersimpan bisa dibaca ulang, kunci tanpa draf → `null`/404). Draf uji dihapus otomatis
+    kecuali `--keep`; jangan tinggalkan file di `data/expertise/` untuk study pasien sungguhan.

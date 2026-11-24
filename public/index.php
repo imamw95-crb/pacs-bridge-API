@@ -22,6 +22,9 @@ declare(strict_types=1);
  *   GET    /studies/{accession}/zip
  *   GET    /studies/{accession}/zip-jpg?quality=90[&watermark=0]   (ZIP berisi JPG ber-watermark, folder = No. RM)
  *   GET    /studies/{accession}/images               (daftar instance/gambar)
+ *   GET    /studies/{key}/expertise                 draf expertise AI yang tersimpan
+ *   POST   /studies/{key}/expertise                 buat draf expertise AI (Ollama vision)
+ *   GET    /ollama/status                           status server Ollama + model vision
  *   GET    /instances/{id}/file
  *   GET    /instances/{id}/jpg?quality=90
  *   GET    /users                     (manager) daftar user dashboard
@@ -39,6 +42,7 @@ use Simrs\Pacs\AuditLogger;
 use Simrs\Pacs\Auth;
 use Simrs\Pacs\Bridge;
 use Simrs\Pacs\ModalityService;
+use Simrs\Pacs\OllamaException;
 use Simrs\Pacs\OrthancException;
 use Simrs\Pacs\Settings;
 use Simrs\Pacs\WatermarkService;
@@ -294,6 +298,10 @@ try {
                     'called_aet' => $config['called_aet'],
                     'calling_aet'=> $config['calling_aet'],
                     'modality'   => $config['modality'],
+                    'ollama_enabled' => $bridge->expertiseEnabled(),
+                    'ollama_url'     => $config['ollama_url'] ?? '',
+                    'ollama_model'   => $config['ollama_model'] ?? '',
+                    'ollama_timeout' => $config['ollama_timeout'] ?? 180,
                 ],
             ]);
         }
@@ -794,6 +802,59 @@ try {
         );
     }
 
+    if (preg_match('#^/studies/([A-Za-z0-9\-.]+)/expertise$#', $path, $m)) {
+        $key = $m[1];
+        auditAccession($key);
+        $expertise = $bridge->expertise();
+
+        if ($method === 'GET') {
+            $draft = $expertise->stored($key);
+            if ($draft === null) {
+                respondError(404, 'EXPERTISE_NOT_FOUND', 'Belum ada draf expertise untuk study ' . $key . '.');
+            }
+            respondJson($draft);
+        }
+
+        if ($method === 'POST') {
+            if (!$bridge->expertiseEnabled()) {
+                respondError(
+                    503,
+                    'EXPERTISE_DISABLED',
+                    'Auto expertise belum diaktifkan. Aktifkan di Pengaturan → Auto Expertise (Ollama).'
+                );
+            }
+            $body = readJsonBody();
+            $model = trim((string) ($body['model'] ?? ''));
+            $result = $expertise->generate($key, $model !== '' ? $model : null);
+            AuditLogger::event('expertise.generate', [
+                'accession'   => $key,
+                'study_id'    => $result['study_id'],
+                'model'       => $result['model'],
+                'duration_ms' => $result['duration_ms'],
+            ]);
+            respondJson($result, 201);
+        }
+
+        respondError(405, 'METHOD_NOT_ALLOWED', 'Gunakan GET atau POST untuk /studies/{key}/expertise.');
+    }
+
+    if ($path === '/ollama/status' && $method === 'GET') {
+        $enabled = $bridge->expertiseEnabled();
+        try {
+            $status = $bridge->expertise()->status();
+        } catch (OllamaException $e) {
+            // Dashboard tetap butuh jawaban agar bisa menampilkan pesan koneksi.
+            respondJson([
+                'enabled'   => $enabled,
+                'reachable' => false,
+                'base_url'  => (string) ($config['ollama_url'] ?? ''),
+                'model'     => (string) ($config['ollama_model'] ?? ''),
+                'error'     => $e->getMessage(),
+            ]);
+        }
+        respondJson(['enabled' => $enabled] + $status);
+    }
+
     if (preg_match('#^/instances/([A-Za-z0-9\-]+)/jpg$#', $path, $m)) {
         $quality = max(1, min(100, (int) ($query['quality'] ?? 90)));
         $image = $bridge->studies()->imageByInstance($m[1], $quality);
@@ -821,6 +882,16 @@ try {
         'orthanc_status' => $e->statusCode,
         'orthanc_body'   => $e->responseBody,
     ], $e->statusCode === 404 ? 404 : 502);
+} catch (OllamaException $e) {
+    respondJson([
+        'error'         => 'Ollama error',
+        'code'          => $e->statusCode === 404 ? 'OLLAMA_MODEL_NOT_FOUND' : 'OLLAMA_ERROR',
+        'message'       => $e->statusCode === 404
+            ? 'Model tidak tersedia di server Ollama. Pilih model lain di Pengaturan → Auto Expertise.'
+            : $e->getMessage(),
+        'ollama_status' => $e->statusCode,
+        'ollama_body'   => $e->responseBody,
+    ], $e->statusCode === 0 ? 503 : ($e->statusCode >= 500 ? 502 : 400));
 } catch (InvalidArgumentException $e) {
     respondError(400, 'VALIDATION_FAILED', $e->getMessage());
 } catch (Throwable $e) {

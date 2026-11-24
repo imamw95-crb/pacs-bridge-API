@@ -58,6 +58,7 @@ php -r "echo bin2hex(random_bytes(24)), PHP_EOL;"
 | `GET /health` | ✅ | ✅ | ✅ |
 | `/worklists` (GET/POST/PUT/DELETE) | ✅ | ✅ | ✅ |
 | `/studies*`, gambar, ZIP, DICOM | ✅ | ✅ | ✅ |
+| `/studies/{key}/expertise` (draf AI) | ✅ | ✅ | ✅ |
 | `GET /settings` | ✅ | ✅ | ✅ (tanpa info API key) |
 | `GET /settings/api-key` (tampilkan key utuh) | ❌ **403** | ✅ | ❌ **403** |
 | `PUT /settings` (ubah IP/port/AET) | ❌ **403** | ✅ | ❌ **403** |
@@ -105,6 +106,9 @@ jadi panggilan `fetch`/XHR dari browser tidak terblokir CORS.
 | `GET /studies/{acc}/images` | ✅ | |
 | `GET /studies/{acc}/zip` | ✅ | arsip biner |
 | `GET /studies/{acc}/zip-jpg` | ✅ | arsip biner |
+| `GET /studies/{acc}/expertise` | ✅ | draf AI terakhir |
+| `POST /studies/{acc}/expertise` | ✅ | panggil model vision Ollama |
+| `GET /ollama/status` | ✅ | status server AI |
 | `GET /instances/{id}/jpg` | ✅ | |
 | `GET /instances/{id}/file` | ✅ | file DICOM |
 | `GET /settings` | ✅ | **tanpa** field `api_key` / `has_api_key` (hanya manager yang melihat) |
@@ -173,6 +177,7 @@ sesi selalu `401`, karena API ini memang tidak punya endpoint data terbuka.
 | 19 | **Audit log** (siapa, kapan, order apa) | `GET /audit` | telusuri pembuatan/penghapusan order & perubahan konfigurasi (manager) |
 | 20 | **Callback/webhook study baru** | `tools/notify-studies.php` + `callback_url` | SIMRS menerima `POST study.received` (HMAC) tanpa polling |
 | 21 | **Daftarkan alat baru ke Orthanc** (DicomModalities) | `GET /modalities`, `PUT /modalities/{aet}`, `POST /modalities/{aet}/echo` | alat baru (mis. USG G2) boleh menarik MWL & mengirim gambar tanpa edit `orthanc.json` (manager) |
+| 22 | **Draf expertise AI** (model vision Ollama, LAN) | `POST /studies/{acc}/expertise`, `GET /studies/{acc}/expertise`, `GET /ollama/status` | draf bacaan untuk diverifikasi dokter; citra tanpa watermark, tidak keluar LAN |
 
 Catatan penting: bridge **tidak menyimpan gambar** — semua endpoint gambar mengambil
 langsung dari Orthanc saat dipanggil (stateless).
@@ -252,7 +257,7 @@ Respons `200` (contoh nyata dari server produksi):
         "count": 3,
         "error": null
     },
-    "bridge_version": "1.2.0",
+    "bridge_version": "1.3.0",
     "server_time": "2026-11-19T11:55:29+07:00"
 }
 ```
@@ -973,6 +978,81 @@ C-ECHO untuk memastikan IP/port/AET alat benar (alat harus menyala).
 ```
 
 Bila alat tidak terjangkau → **502** `{"code":"ECHO_FAILED","message":"C-ECHO gagal — alat belum terjangkau atau AET/IP/port salah."}`.
+
+---
+
+### 4.9 Auto expertise — draf bacaan AI (Ollama)
+
+Membuat draf bacaan dari **satu gambar** study (render PNG 1024px, **tanpa watermark** supaya
+identitas pasien tidak ikut ke model) memakai model vision di server Ollama jaringan lokal.
+Hasil **selalu draf** — wajib diverifikasi dokter/radiolog.
+
+Aktifkan di **Pengaturan → Auto Expertise (Ollama)**: `ollama_enabled`, `ollama_url`
+(default dari `data/integrasiollama/ip ollama`), `ollama_model` (default `qwen3.5:9b`),
+`ollama_timeout` (5–600 detik). Override env: `PACS_OLLAMA_URL`, `PACS_OLLAMA_MODEL`,
+`PACS_OLLAMA_ENABLED`, `PACS_OLLAMA_TIMEOUT`.
+
+#### `GET /ollama/status`
+
+```json
+{
+  "enabled": true,
+  "reachable": true,
+  "base_url": "http://192.168.0.9:11434",
+  "version": "0.33.1",
+  "model": "qwen3.5:9b",
+  "model_ready": true,
+  "vision_models": ["qwen3.5:9b", "gemma4:12b"],
+  "models": [{"name": "mistral-nemo:latest", "vision": false}, {"name": "qwen3.5:9b", "vision": true}]
+}
+```
+
+Server tidak terjangkau → tetap `200` dengan `reachable:false` + `error` (dipakai tombol
+**Tes koneksi** di dashboard).
+
+#### `POST /studies/{key}/expertise`
+
+`{key}` = AccessionNumber, ID Orthanc, atau StudyInstanceUID. Body opsional:
+`{"model":"gemma4:12b"}` (default `ollama_model`).
+
+`201`:
+
+```json
+{
+  "study_key": "A261124001",
+  "study_id": "cfc94834-...",
+  "accession": "A261124001",
+  "modality": "DX",
+  "study_description": "Chest AP",
+  "study_date": "20261124",
+  "model": "qwen3.5:9b",
+  "prompt_version": "v1",
+  "generated_at": "2026-11-24T08:44:12+07:00",
+  "duration_ms": 2683,
+  "eval_count": 239,
+  "parsed": true,
+  "draft": {
+    "kualitas": "cukup baik",
+    "temuan_utama": "tidak dapat dinilai dengan pasti pada satu gambar ini",
+    "temuan_lain": "tulang tampak utuh tanpa fraktur jelas",
+    "kesan": "tidak ada temuan akut yang jelas terlihat pada satu gambar ini",
+    "rekomendasi": "bila klinis mencurigakan, lanjutkan dengan CT toraks",
+    "keyakinan": "rendah"
+  },
+  "disclaimer": "DRAF AI — wajib diverifikasi dokter/radiolog sebelum dipakai."
+}
+```
+
+Draf disimpan di `data/expertise/{key}.json`. `GET` pada path yang sama mengembalikan draf
+terakhir (`404 EXPERTISE_NOT_FOUND` bila belum ada).
+
+Error: `503 EXPERTISE_DISABLED` (saklar mati), `404` study/gambar belum ada, `503 OLLAMA_ERROR`
+server Ollama tidak terjangkau, `400 OLLAMA_MODEL_NOT_FOUND` model tidak ada, `502` error 5xx
+dari Ollama.
+
+> **Catatan model:** prompt memakai aturan konservatif + `format=json` dan **`think=false`**.
+> Tanpa `think=false`, token `num_predict` habis di bagian thinking sehingga `response` kosong.
+> Latensi ±3–15 detik per study (load pertama ±8 detik). Uji: `php tools/test-expertise.php <baseUrl> <API_KEY>`.
 
 ---
 

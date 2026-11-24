@@ -19,6 +19,8 @@
 | `src/WorklistConflictException.php` | konflik AccessionNumber (HTTP 409 `ACCESSION_CONFLICT`) |
 | `src/Bridge.php` | facade (`Bridge::fromSettingFile()`) |
 | `src/BridgeApiClient.php` | HTTP client untuk **Bridge API** (pakai header `X-API-Key`) |
+| `src/OllamaExpertise.php` | draf expertise AI dari 1 gambar study via model vision Ollama (LAN), simpan di `data/expertise/` |
+| `src/OllamaException.php` | exception server Ollama (koneksi/timeout/error respons) |
 | `src/BridgeApiException.php` | exception khusus Bridge API (401/403/5xx) |
 | `src/autoload.php` | autoloader sederhana namespace `Simrs\Pacs` |
 | `public/index.php` | REST API bridge (router) |
@@ -37,6 +39,7 @@
 | `tools/test-ci-integration.php` | self-test library integrasi CI3 & CI4 |
 | `tools/test-api-key.php` | self-test API key pada Bridge API (`BridgeApiClient`) |
 | `tools/test-order-flow.php` | self-test idempotensi order, 409 konflik, status order, 404, dan audit |
+| `tools/test-expertise.php` | self-test auto expertise Ollama (status server, buat draf, baca ulang; draf uji dihapus) |
 | `tools/notify-studies.php` | worker **callback study baru** ke SIMRS (`/changes` → POST + HMAC, inkremental) |
 | `deploy/cron-pacs-notify` | jadwal cron tiap menit untuk `tools/notify-studies.php` |
 | `tools/test-users.php` | self-test peran user dashboard (manager vs operator), membuat & menghapus user uji |

@@ -79,6 +79,25 @@ final class Bridge
     }
 
     /**
+     * Auto expertise (draf bacaan AI) memakai model vision di server Ollama LAN.
+     */
+    public function expertise(): OllamaExpertise
+    {
+        return new OllamaExpertise(
+            $this->studies(),
+            (string) ($this->config['ollama_url'] ?? ''),
+            (string) ($this->config['ollama_model'] ?? 'qwen3.5:9b'),
+            max(5, (int) ($this->config['ollama_timeout'] ?? 180)),
+            dirname(__DIR__) . '/data/expertise'
+        );
+    }
+
+    public function expertiseEnabled(): bool
+    {
+        return (bool) ($this->config['ollama_enabled'] ?? false);
+    }
+
+    /**
      * Ringkasan kesehatan server untuk endpoint /health.
      *
      * @return array<string, mixed>

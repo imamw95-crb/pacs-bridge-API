@@ -35,7 +35,7 @@ Ringkas di bawah; tabel lengkap per file: `docs/REF-LINGKUNGAN.md` §2.
 
 | Path | Isi |
 |---|---|
-| `src/` | SDK `Simrs\Pacs` tanpa Composer: `Config`, `OrthancClient`, `WorklistService`, `StudyService`, `Settings`, `Auth`, `WatermarkService`, `AuditLogger`, `ModalityService`, `ZipWriter`, `Bridge`, `BridgeApiClient`, `autoload.php` |
+| `src/` | SDK `Simrs\Pacs` tanpa Composer: `Config`, `OrthancClient`, `WorklistService`, `StudyService`, `Settings`, `Auth`, `WatermarkService`, `AuditLogger`, `ModalityService`, `ZipWriter`, `Bridge`, `BridgeApiClient`, `OllamaExpertise`, `OllamaException`, `autoload.php` |
 | `public/index.php` | router REST API (semua endpoint + otorisasi) |
 | `public/dashboard.html` | dashboard web (login, worklist, study, pengaturan) — tanpa build step |
 | `public/router.php` | router `php -S` (path ber-titik/UID DICOM tidak 404) |
@@ -77,7 +77,8 @@ Alat terdaftar (`DicomModalities` + `worklist_devices`):
 Override env: `PACS_SERVER_IP`, `PACS_HTTP_PORT`, `PACS_DICOM_PORT`, `PACS_CALLED_AET`,
 `PACS_CALLING_AET`, `PACS_MODALITY`, `PACS_HTTP_USER`, `PACS_HTTP_PASS`, `PACS_BRIDGE_KEY`,
 `PACS_TIMEOUT`, `PACS_TIMEZONE` (default `Asia/Jakarta`), `PACS_WATERMARK_FONT`,
-`PACS_CALLBACK_URL`, `PACS_CALLBACK_KEY`.
+`PACS_CALLBACK_URL`, `PACS_CALLBACK_KEY`, `PACS_OLLAMA_URL`, `PACS_OLLAMA_MODEL`,
+`PACS_OLLAMA_ENABLED`, `PACS_OLLAMA_TIMEOUT`.
 
 ## 4. Aturan wajib
 
@@ -110,6 +111,7 @@ Override env: `PACS_SERVER_IP`, `PACS_HTTP_PORT`, `PACS_DICOM_PORT`, `PACS_CALLE
 - Study bisa **tanpa AccessionNumber** → `findOneByKey()` (acc → ID Orthanc → UID); dashboard memakai ID Orthanc.
 - Semua request dicatat `AuditLogger` (`data/audit.log`, rotasi 5 MB); `GET /audit` hanya manager.
 - Callback study baru: `tools/notify-studies.php` → `POST study.received` + HMAC `X-Bridge-Signature`, at-least-once (penerima wajib idempotent per `study_id`).
+- Auto expertise: `src/OllamaExpertise.php` (`POST /studies/{key}/expertise`) — render PNG 1024px **tanpa watermark** → model vision Ollama LAN (`format=json`, **`think=false`**), hasil = draf wajib verifikasi dokter, disimpan `data/expertise/{key}.json`. Nonaktif kecuali `ollama_enabled=true`.
 
 ### Jangan
 
@@ -130,6 +132,7 @@ php tools/selftest.php                  # 8 pass (buat lalu hapus entry uji)
 php tools/test-api-key.php http://127.0.0.1:8081 <API_KEY>
 php tools/test-order-flow.php http://127.0.0.1:8081 <API_KEY>     # 8 pass
 php tools/test-users.php http://127.0.0.1:8081 admin admin        # 19 pass
+php tools/test-expertise.php http://127.0.0.1:8081 <API_KEY>     # 7 pass (butuh Ollama + ollama_enabled)
 php tools/test-ci-integration.php       # 9 pass (12 pass bila env PACS_BRIDGE_TEST_* diisi)
 php -S 0.0.0.0:8081 -t public public/router.php      # dev: http://127.0.0.1:8081/ (admin/admin)
 php tools/pull-santesrv1.php --dry-run               # tarikan SANTESRV1
@@ -147,8 +150,9 @@ Di Laragon: docroot → folder `public/`.
 2. Perubahan inti/SDK → `php tools/selftest.php` **8 pass, 0 fail**.
 3. Order/status/audit → `tools/test-order-flow.php` **8 pass** (idempotensi, 409, `sent`→`cancelled`, 404, `/audit` 403 untuk key).
 4. Auth/user → `tools/test-users.php` **19 pass**; integrasi CI → `tools/test-ci-integration.php` **9 pass**.
-5. Endpoint: `/health` 200, `/studies/{acc}/jpg` → `image/jpeg`.
-6. Tidak meninggalkan order/user uji. Detail: `docs/REF-OPERASIONAL.md` §8.
+5. Auto expertise/Ollama → `tools/test-expertise.php <baseUrl> <API_KEY>` **7 pass** (draf dihapus otomatis).
+6. Endpoint: `/health` 200, `/studies/{acc}/jpg` → `image/jpeg`.
+7. Tidak meninggalkan order/user uji. Detail: `docs/REF-OPERASIONAL.md` §8.
 
 ## 7. Konvensi & keamanan
 

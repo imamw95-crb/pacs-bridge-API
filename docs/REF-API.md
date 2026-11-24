@@ -83,6 +83,9 @@ if ($img !== null) {
 | GET | `/studies/{acc}/zip` | ZIP seluruh study (DICOM) |
 | GET | `/studies/{acc}/zip-jpg?quality=90` | ZIP berisi JPG **ber-watermark**, folder = No. RM (`watermark=0` untuk mematikan; modalitas US selalu tanpa watermark) |
 | GET | `/studies/{acc}/images` | daftar instance/gambar study |
+| GET | `/studies/{acc}/expertise` | draf expertise AI terakhir (`data/expertise/{key}.json`; `404` bila belum ada) |
+| POST | `/studies/{acc}/expertise` | buat draf expertise AI (model vision Ollama; body opsional `{"model":"qwen3.5:9b"}`; `503` bila `ollama_enabled=false`) |
+| GET | `/ollama/status` | status server Ollama: `reachable`, `version`, `vision_models`, `model_ready` |
 | GET | `/instances/{id}/jpg?quality=90` | render 1 instance sebagai JPEG |
 | GET | `/instances/{id}/file` | 1 file DICOM |
 
@@ -90,6 +93,29 @@ Catatan: pada semua endpoint study, `{acc}` boleh berisi **AccessionNumber**, **
 (`142ca2db-e3ae40d0-...`), atau **StudyInstanceUID**. Alat tertentu (mis. workstation USG)
 mengirim study **tanpa AccessionNumber**; dashboard memakai ID Orthanc untuk study seperti
 itu supaya gambar/ZIP tetap bisa diambil.
+
+### 6.10 Auto expertise (draf AI lewat Ollama)
+
+Draf bacaan dari **satu gambar** study (render PNG 1024px, **tanpa watermark** — identitas pasien
+tidak ikut ke model) memakai model vision di server Ollama jaringan lokal. Hasil **selalu draf**:
+wajib diverifikasi dokter/radiolog, bukan diagnosis final.
+
+- Aktifkan di **Pengaturan → Auto Expertise (Ollama)** (`ollama_enabled`), isi `ollama_url`,
+  `ollama_model` (default `qwen3.5:9b`), dan `ollama_timeout` (default 180 detik).
+- URL bawaan dibaca dari `data/integrasiollama/ip ollama` (isi mis. `server Ollama 192.168.0.9`
+  → `http://192.168.0.9:11434`). Override env: `PACS_OLLAMA_URL`, `PACS_OLLAMA_MODEL`,
+  `PACS_OLLAMA_ENABLED`, `PACS_OLLAMA_TIMEOUT`.
+- Model wajib punya capability `vision` (`qwen3.5:9b`, `gemma4:12b` di server 192.168.0.9);
+  `GET /ollama/status` menampilkan `vision_models` dan `model_ready`. Model tanpa vision
+  menghasilkan draf kosong.
+- `POST /studies/{key}/expertise` → `201` dengan `{study_key, model, prompt_version, duration_ms,
+  parsed, draft:{kualitas, temuan_utama, temuan_lain, kesan, rekomendasi, keyakinan}, disclaimer}`.
+  Draf disimpan di `data/expertise/{key}.json`; `GET` mengembalikan draf terakhir.
+- Prompt memakai aturan konservatif (tidak menyebut temuan yang tidak jelas terlihat) dengan
+  `format=json` dan **`think=false`** — tanpa itu token habis di bagian thinking dan respons
+  bisa kosong.
+- Latensi ±3–15 detik per study setelah model termuat (pemuatan pertama ±8 detik). Citra tidak
+  pernah keluar dari LAN; audit hanya mencatat `study_id`, model, dan durasi.
 
 Contoh body POST `/worklists`:
 

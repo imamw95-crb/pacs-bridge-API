@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>RIS-HLS PATROL — PACS Bridge API Worklist DICOM</title>
-<meta name="bridge-version" content="1.2.0">
+<meta name="bridge-version" content="1.3.0">
 <link rel="icon" type="image/png" href="assets/favicon.png">
 <style>
   :root {
@@ -172,6 +172,7 @@
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .study .actions .view-btn { flex: 1 1 100%; font-size: 12px; font-weight: 600; padding: 7px 10px; }
+  .study .actions .ai-btn { flex: 1 1 100%; font-size: 12px; padding: 6px 10px; }
   .empty { color: var(--muted); font-size: 13px; padding: 22px 4px; text-align: center; }
 
   /* worklist: panel sidebar sempit → kartu bertumpuk (bukan tabel) agar tombol Hapus selalu terlihat */
@@ -199,8 +200,8 @@
   .toast div.ok { border-left-color: #16a34a; }
   .toast div.err { border-left-color: var(--danger); color: var(--danger); }
 
-  #modal, #settings, #account { position: fixed; inset: 0; display: none; place-items: center; background: rgba(15, 23, 42, .45); z-index: 90; padding: 16px; }
-  #modal.open, #settings.open, #account.open { display: grid; }
+  #modal, #settings, #account, #ai { position: fixed; inset: 0; display: none; place-items: center; background: rgba(15, 23, 42, .45); z-index: 90; padding: 16px; }
+  #modal.open, #settings.open, #account.open, #ai.open { display: grid; }
   #modal .viewer {
     width: min(1680px, 98vw); height: min(94vh, 1080px); display: flex; flex-direction: column;
     background: #fff; border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
@@ -247,6 +248,22 @@
     #modal .cap { white-space: normal; }
     #modal .viewer { height: 96vh; }
   }
+
+  #ai .card {
+    width: 100%; max-width: 720px; max-height: 88vh; overflow: auto;
+    background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 20px 22px;
+    box-shadow: 0 18px 40px rgba(16, 24, 40, .18);
+  }
+  #ai h3 { margin: 0 0 4px; font-size: 16px; font-weight: 650; }
+  #ai .warn {
+    margin-top: 12px; padding: 8px 10px; border-radius: 8px; font-size: 12px;
+    background: #fff7e6; border: 1px solid #f0d090; color: #8a5a00;
+  }
+  #ai .ai-sec { margin-top: 14px; }
+  #ai .ai-sec h5 { margin: 0 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: .7px; color: var(--muted); font-weight: 600; }
+  #ai .ai-sec p { margin: 0; font-size: 13px; line-height: 1.55; white-space: pre-wrap; }
+  #ai .ai-meta { margin-top: 16px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 11.5px; color: var(--muted); }
+  #ai .ai-load { display: flex; align-items: center; gap: 8px; padding: 18px 0; font-size: 13px; color: var(--muted); }
 
   #settings .card, #account .card {
     width: 100%; max-width: 760px; max-height: 90vh; overflow: auto;
@@ -563,6 +580,31 @@
         </div>
       </div>
 
+      <div class="sec" id="secOllama">
+        <h4>Auto Expertise (Ollama)</h4>
+        <div class="muted" style="margin-bottom:10px">
+          Membuat draf bacaan (expertise) otomatis dari <strong>satu gambar</strong> study memakai model
+          vision di server Ollama jaringan lokal — citra tidak dikirim ke internet.
+          Hasil hanya <strong>draf</strong>; verifikasi dokter tetap wajib.
+        </div>
+        <div class="fields">
+          <div class="full">
+            <label class="chk" for="sOllamaEnabled">
+              <input type="checkbox" id="sOllamaEnabled">
+              <span>Aktifkan tombol <strong>Draf AI</strong> di daftar study</span>
+            </label>
+          </div>
+          <div><label for="sOllamaUrl">URL server Ollama</label><input id="sOllamaUrl" class="mono" placeholder="http://192.168.0.9:11434"></div>
+          <div><label for="sOllamaModel">Model vision</label><input id="sOllamaModel" class="mono" placeholder="qwen3.5:9b"></div>
+          <div><label for="sOllamaTimeout">Timeout (detik)</label><input id="sOllamaTimeout" type="number" min="5" max="600" placeholder="180"></div>
+          <div>
+            <label>&nbsp;</label>
+            <button type="button" class="ghost" id="btnOllamaTest">Tes koneksi (nilai tersimpan)</button>
+          </div>
+        </div>
+        <div class="muted" id="ollamaStatus" style="margin-top:8px"></div>
+      </div>
+
       <div class="sec" id="secUsers">
         <h4>Pengguna dashboard (manager &amp; operator)</h4>
         <div class="muted" style="margin-bottom:10px">
@@ -636,6 +678,9 @@
               <tr><td>GET</td><td class="path">/studies/{acc}/zip</td><td>unduh semua DICOM satu study</td><td>✅</td></tr>
               <tr><td>GET</td><td class="path">/studies/{acc}/zip-jpg?quality=</td><td>ZIP berisi JPG ber-watermark, folder = No. RM (USG/EKG tanpa watermark)</td><td>✅</td></tr>
               <tr><td>GET</td><td class="path">/studies/{acc}/images</td><td>daftar gambar study (instance)</td><td>✅</td></tr>
+              <tr><td>GET</td><td class="path">/studies/{acc}/expertise</td><td>draf expertise AI terakhir (404 bila belum ada)</td><td>✅</td></tr>
+              <tr><td>POST</td><td class="path">/studies/{acc}/expertise</td><td>buat draf expertise AI (Ollama vision; wajib verifikasi dokter)</td><td>✅</td></tr>
+              <tr><td>GET</td><td class="path">/ollama/status</td><td>status server Ollama + model vision</td><td>✅</td></tr>
               <tr><td>GET</td><td class="path">/instances/{id}/jpg?quality=</td><td>1 gambar instance (JPEG)</td><td>✅</td></tr>
               <tr><td>GET</td><td class="path">/instances/{id}/file</td><td>unduh 1 file DICOM</td><td>✅</td></tr>
               <tr><td>GET</td><td class="path">/settings</td><td>baca konfigurasi aktif (tanpa info API key)</td><td>✅</td></tr>
@@ -737,6 +782,25 @@
   </div>
 </div>
 
+<div id="ai">
+  <div class="card">
+    <div style="display:flex;align-items:center;gap:10px">
+      <div style="flex:1;min-width:0">
+        <h3>Draf Expertise AI</h3>
+        <div class="muted" id="aiSub">—</div>
+      </div>
+      <button class="ghost" id="btnAiClose">Tutup</button>
+    </div>
+    <div class="warn">⚠ Draf AI — wajib diverifikasi dokter/radiolog sebelum dipakai. Bukan diagnosis final.</div>
+    <div id="aiBody"></div>
+    <div class="ai-meta" id="aiMeta"></div>
+    <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
+      <button class="ghost" id="btnAiCopy">Salin teks</button>
+      <button class="ghost" id="btnAiRegen">Buat ulang</button>
+    </div>
+  </div>
+</div>
+
 <script>
 (function () {
   'use strict';
@@ -768,6 +832,9 @@ let pendingClearCallback = false;
   let studyLimit = 24;
   let currentRecent = null;
   let worklistDevices = [];
+  // status server Ollama (auto expertise): {enabled, reachable, model, ...}
+  let aiInfo = { enabled: false, reachable: false, model: '' };
+  let aiCurrent = null;
   // modalitas yang benar-benar muncul di study (untuk tab otomatis) + saklar di Pengaturan
   let detectedModalities = [];
   let autoModalityTabs = true;
@@ -1094,6 +1161,8 @@ let pendingClearCallback = false;
       `data-mod="${esc(tags.Modality || '')}"`
     ].join(' ');
     const full = key ? `<button class="primary view-btn" data-view="1" ${viewerData}>Lihat gambar</button>` : '';
+    const aiBtn = key && aiInfo.enabled
+      ? `<button class="ghost ai-btn" data-ai="1" ${viewerData} title="Buat draf bacaan dengan AI (Ollama, jaringan lokal)">Draf AI</button>` : '';
 
     return `<article class="study">
       <div class="thumb" ${key ? 'data-view="1" ' + viewerData : ''}>${img}</div>
@@ -1102,8 +1171,14 @@ let pendingClearCallback = false;
         <div class="sub mono">${esc(pat.PatientID || '')} ${acc ? '· ' + esc(acc) : ''}</div>
         <div class="sub">${esc(fmtDate(tags.StudyDate, tags.StudyTime))}${modality}</div>
       </div>
-      <div class="actions">${full}${zipJpg}${zip}${viewer}</div>
+      <div class="actions">${full}${aiBtn}${zipJpg}${zip}${viewer}</div>
     </article>`;
+  }
+
+  // Tombol viewer & draf AI dipasang ulang setiap kali kartu study dirender.
+  function bindStudyActions(container) {
+    container.querySelectorAll('[data-view]').forEach((el) => el.addEventListener('click', () => openModal(el.dataset)));
+    container.querySelectorAll('[data-ai]').forEach((el) => el.addEventListener('click', () => openExpertise(el.dataset)));
   }
 
   function renderStudies(list, emptyHtml) {
@@ -1114,7 +1189,7 @@ let pendingClearCallback = false;
       return;
     }
     box.innerHTML = items.map(studyCard).join('');
-    box.querySelectorAll('[data-view]').forEach((el) => el.addEventListener('click', () => openModal(el.dataset)));
+    bindStudyActions(box);
   }
 
   function appendOutside(outside) {
@@ -1130,7 +1205,7 @@ let pendingClearCallback = false;
     const grid = document.createElement('div');
     grid.className = 'studies outside-grid';
     grid.innerHTML = items.map(studyCard).join('');
-    grid.querySelectorAll('[data-view]').forEach((el) => el.addEventListener('click', () => openModal(el.dataset)));
+    bindStudyActions(grid);
     box.appendChild(note);
     box.appendChild(grid);
   }
@@ -1674,6 +1749,85 @@ let pendingClearCallback = false;
 
   $('btnAddDevice').addEventListener('click', () => addDeviceRow({}));
 
+  /* ---------- auto expertise (Ollama) ---------- */
+  async function loadOllama() {
+    try {
+      aiInfo = await api('ollama/status');
+    } catch (e) {
+      aiInfo = { enabled: false, reachable: false, model: '' };
+    }
+    return aiInfo;
+  }
+
+  async function openExpertise(data) {
+    const key = (data && data.key) || '';
+    if (!key) return;
+    aiCurrent = null;
+    $('ai').classList.add('open');
+    $('aiSub').textContent = ((data.name || '') + (data.acc ? ' · ' + data.acc : '')).trim() || key;
+    const btn = $('btnAiRegen');
+    btn.dataset.key = key;
+    btn.dataset.name = data.name || '';
+    btn.dataset.acc = data.acc || '';
+    btn.disabled = true;
+    $('btnAiCopy').disabled = true;
+    $('aiMeta').textContent = '';
+    $('aiBody').innerHTML = '<div class="ai-load"><span class="spin"></span> menganalisis gambar dengan '
+      + esc(aiInfo.model || 'model Ollama') + '… (10–60 detik)</div>';
+    try {
+      aiCurrent = await api('studies/' + encodeURIComponent(key) + '/expertise', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+      renderExpertise(aiCurrent);
+      $('btnAiCopy').disabled = false;
+    } catch (err) {
+      $('aiBody').innerHTML = '<div class="empty">Gagal membuat draf: ' + esc(err.message) + '</div>';
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function renderExpertise(res) {
+    const draft = (res && res.draft) || {};
+    const rows = [
+      ['Kesan', draft.kesan],
+      ['Temuan utama', draft.temuan_utama],
+      ['Temuan lain', draft.temuan_lain],
+      ['Kualitas gambar', draft.kualitas],
+      ['Rekomendasi', draft.rekomendasi],
+      ['Keyakinan model', draft.keyakinan]
+    ].filter((row) => row[1]);
+    $('aiBody').innerHTML = rows.length
+      ? rows.map((row) => `<div class="ai-sec"><h5>${esc(row[0])}</h5><p>${esc(row[1])}</p></div>`).join('')
+      : '<div class="empty">Model tidak mengembalikan teks yang bisa dibaca.</div>';
+    const detik = res && res.duration_ms ? Math.round(res.duration_ms / 100) / 10 : null;
+    $('aiMeta').textContent = [
+      'Model ' + (res.model || '?'),
+      detik !== null ? detik + ' detik' : '',
+      res.generated_at ? new Date(res.generated_at).toLocaleString('id-ID') : '',
+      res.parsed === false ? 'respons tidak sepenuhnya JSON — periksa manual' : ''
+    ].filter(Boolean).join(' · ');
+  }
+
+  function expertiseText(res) {
+    const draft = (res && res.draft) || {};
+    const lines = [
+      'DRAF EXPERTISE AI — wajib diverifikasi dokter',
+      (res.study_description || '') + (res.modality ? ' (' + res.modality + ')' : '')
+    ];
+    [['Kesan', draft.kesan], ['Temuan utama', draft.temuan_utama], ['Temuan lain', draft.temuan_lain],
+     ['Kualitas gambar', draft.kualitas], ['Rekomendasi', draft.rekomendasi], ['Keyakinan', draft.keyakinan]]
+      .forEach((row) => { if (row[1]) lines.push('', row[0] + ': ' + row[1]); });
+    return lines.join('\n');
+  }
+
+  $('btnAiClose').addEventListener('click', () => $('ai').classList.remove('open'));
+  $('btnAiRegen').addEventListener('click', (e) => openExpertise(e.currentTarget.dataset));
+  $('btnAiCopy').addEventListener('click', () => { if (aiCurrent) copyText(expertiseText(aiCurrent)); });
+  $('ai').addEventListener('click', (e) => { if (e.target === $('ai')) $('ai').classList.remove('open'); });
+
   /* ---------- settings ---------- */
   async function openSettings() {
     $('settings').classList.add('open');
@@ -1705,6 +1859,14 @@ let pendingClearCallback = false;
       $('sCallbackKey').placeholder = s.has_callback_key ? '(sudah diset — isi untuk mengganti)' : 'kosong = tidak berubah';
       pendingClearCallback = false;
       $('btnClearCallbackKey').style.display = s.has_callback_key ? '' : 'none';
+
+      const ollamaOn = s.ollama_enabled === undefined ? eff.ollama_enabled : s.ollama_enabled;
+      $('sOllamaEnabled').checked = ollamaOn === true;
+      $('sOllamaUrl').value = s.ollama_url || eff.ollama_url || '';
+      $('sOllamaModel').value = s.ollama_model || eff.ollama_model || 'qwen3.5:9b';
+      $('sOllamaTimeout').value = s.ollama_timeout || eff.ollama_timeout || 180;
+      $('ollamaStatus').textContent = '';
+
       loadUsers();
 
       try {
@@ -1738,6 +1900,29 @@ let pendingClearCallback = false;
     $('sAutoTabs').focus();
   });
   $('btnCloseSettings').addEventListener('click', () => $('settings').classList.remove('open'));
+
+  $('btnOllamaTest').addEventListener('click', async () => {
+    const el = $('ollamaStatus');
+    el.textContent = 'Menghubungi server Ollama…';
+    try {
+      const st = await api('ollama/status');
+      if (!st.reachable) {
+        el.innerHTML = '<span style="color:var(--danger)">✕</span> ' + esc(st.error || 'server tidak terjangkau');
+        return;
+      }
+      const vision = Array.isArray(st.vision_models) ? st.vision_models : [];
+      const list = vision.length
+        ? vision.map((name) => '<code>' + esc(name) + '</code>').join(' ')
+        : '(tidak ada model vision)';
+      const modelNote = st.model_ready
+        ? ' Model aktif <code>' + esc(st.model) + '</code> siap dipakai.'
+        : ' <strong style="color:var(--danger)">Model aktif <code>' + esc(st.model) + '</code> tidak punya capability vision.</strong>';
+      el.innerHTML = '<span style="color:var(--ok)">●</span> Terhubung ke ' + esc(st.base_url || '')
+        + ' (v' + esc(st.version || '?') + '). Model vision: ' + list + '.' + modelNote;
+    } catch (e) {
+      el.innerHTML = '<span style="color:var(--danger)">✕</span> ' + esc(e.message);
+    }
+  });
 
   /* ---------- dokumentasi API (di panel pengaturan) ---------- */
   async function copyText(text) {
@@ -1996,7 +2181,11 @@ let pendingClearCallback = false;
       client_ip: $('sClientIp').value.trim(),
       study_filter: $('sFilter').value,
       auto_modality_tabs: $('sAutoTabs').checked,
-      worklist_devices: collectDevices()
+      worklist_devices: collectDevices(),
+      ollama_enabled: $('sOllamaEnabled').checked,
+      ollama_url: $('sOllamaUrl').value.trim(),
+      ollama_model: $('sOllamaModel').value.trim() || 'qwen3.5:9b',
+      ollama_timeout: parseInt($('sOllamaTimeout').value, 10) || 180
     };
     const newKey = $('sApiKey').value.trim();
     if (newKey !== '') payload.api_key = newKey;
@@ -2030,6 +2219,9 @@ let pendingClearCallback = false;
       if (options.close !== false) $('settings').classList.remove('open');
       loadDevices();
       loadHealth();
+      // saklar Auto Expertise bisa berubah → tombol "Draf AI" perlu dirender ulang
+      await loadOllama();
+      if (currentRecent !== null) loadRecent(currentRecent);
       return true;
     } catch (err) {
       toast('Gagal menyimpan: ' + err.message, 'err');
@@ -2126,6 +2318,7 @@ let pendingClearCallback = false;
   async function boot() {
     $('dateInput').value = ymdToInput(todayYmd());
     await loadHealth();
+    await loadOllama();
     loadDevices();
     fillAccession();
     loadWorklist();

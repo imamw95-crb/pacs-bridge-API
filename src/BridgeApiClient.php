@@ -243,6 +243,46 @@ final class BridgeApiClient
     }
 
     /**
+     * Status server Ollama untuk auto expertise (reachable, model vision, model aktif).
+     *
+     * @return array<string, mixed>
+     */
+    public function expertiseStatus(): array
+    {
+        return $this->json('GET', '/ollama/status');
+    }
+
+    /**
+     * Draf expertise AI yang sudah tersimpan (null bila belum pernah dibuat).
+     *
+     * @return array<string, mixed>|null
+     */
+    public function expertise(string $key): ?array
+    {
+        try {
+            return $this->json('GET', '/studies/' . rawurlencode($key) . '/expertise');
+        } catch (BridgeApiException $e) {
+            if ($e->statusCode === 404) {
+                return null;
+            }
+
+            throw $e;
+        }
+    }
+
+    /**
+     * Buat draf expertise AI baru (memanggil model vision di server Ollama).
+     *
+     * @return array<string, mixed>
+     */
+    public function createExpertise(string $key, ?string $model = null): array
+    {
+        $body = $model !== null && $model !== '' ? ['model' => $model] : null;
+
+        return $this->json('POST', '/studies/' . rawurlencode($key) . '/expertise', $body);
+    }
+
+    /**
      * @return array{content: string, mime: string, filename: string}|null
      */
     private function image(string $path): ?array

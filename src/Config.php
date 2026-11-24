@@ -30,6 +30,10 @@ final class Config
             'user'        => null,
             'password'    => null,
             'api_key'     => null,
+            'ollama_enabled' => false,
+            'ollama_url'     => self::defaultOllamaUrl(),
+            'ollama_model'   => 'qwen3.5:9b',
+            'ollama_timeout' => 180,
         ];
 
         $envMap = [
@@ -43,6 +47,10 @@ final class Config
             'user'        => 'PACS_HTTP_USER',
             'password'    => 'PACS_HTTP_PASS',
             'api_key'     => 'PACS_BRIDGE_KEY',
+            'ollama_enabled' => 'PACS_OLLAMA_ENABLED',
+            'ollama_url'     => 'PACS_OLLAMA_URL',
+            'ollama_model'   => 'PACS_OLLAMA_MODEL',
+            'ollama_timeout' => 'PACS_OLLAMA_TIMEOUT',
         ];
 
         // Lapisan kedua: pengaturan dari dashboard (data/settings.json)
@@ -54,9 +62,7 @@ final class Config
                     if (!isset($stored[$key]) || $stored[$key] === '') {
                         continue;
                     }
-                    $cfg[$key] = in_array($key, ['dicom_port', 'http_port', 'timeout'], true)
-                        ? (int) $stored[$key]
-                        : $stored[$key];
+                    $cfg[$key] = self::cast($key, $stored[$key]);
                 }
             }
         }
@@ -66,14 +72,50 @@ final class Config
             if ($value === false || $value === '') {
                 continue;
             }
-            $cfg[$key] = in_array($key, ['dicom_port', 'http_port', 'timeout'], true)
-                ? (int) $value
-                : $value;
+            $cfg[$key] = self::cast($key, $value);
         }
 
         $cfg['base_url'] = sprintf('http://%s:%d', $cfg['server_ip'], $cfg['http_port']);
 
         return $cfg;
+    }
+
+    /**
+     * @param mixed $value
+     * @return mixed nilai sesuai tipe key (int/bool/string)
+     */
+    private static function cast(string $key, $value)
+    {
+        if (in_array($key, ['dicom_port', 'http_port', 'timeout', 'ollama_timeout'], true)) {
+            return (int) $value;
+        }
+        if ($key === 'ollama_enabled') {
+            return in_array(strtolower(trim((string) $value)), ['1', 'true', 'yes', 'on'], true);
+        }
+
+        return $value;
+    }
+
+    /**
+     * URL Ollama bawaan dari `data/integrasiollama/ip ollama` (diisi manual saat
+     * menyiapkan server AI). Contoh isi: `server Ollama 192.168.0.9`.
+     */
+    private static function defaultOllamaUrl(): string
+    {
+        $file = dirname(__DIR__) . '/data/integrasiollama/ip ollama';
+        if (!is_readable($file)) {
+            return '';
+        }
+
+        $content = (string) file_get_contents($file);
+        if (preg_match('#https?://[^\s]+#i', $content, $m) === 1) {
+            return rtrim($m[0], '/');
+        }
+        if (preg_match('/\b(\d{1,3}(?:\.\d{1,3}){3})\b/', $content, $m) === 1) {
+            return 'http://' . $m[1] . ':11434';
+        }
+
+        return '';
     }
 
     /**

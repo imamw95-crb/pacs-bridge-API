@@ -37,6 +37,10 @@ final class Settings
         'admin_user'  => 'admin',
         'study_filter'=> 'today',
         'worklist_devices' => null,
+        'ollama_enabled'   => false,
+        'ollama_url'       => null,
+        'ollama_model'     => 'qwen3.5:9b',
+        'ollama_timeout'   => 180,
     ];
 
     public function __construct(private readonly string $path)
@@ -488,6 +492,34 @@ final class Settings
 
         if (array_key_exists('worklist_devices', $input)) {
             $clean['worklist_devices'] = self::validateDevices($input['worklist_devices']);
+        }
+
+        if (array_key_exists('ollama_enabled', $input)) {
+            $clean['ollama_enabled'] = self::toBool($input['ollama_enabled']);
+        }
+
+        if (array_key_exists('ollama_url', $input)) {
+            $value = rtrim(trim((string) $input['ollama_url']), '/');
+            if ($value !== '' && preg_match('#^https?://[^\s/]+#i', $value) !== 1) {
+                throw new \InvalidArgumentException('ollama_url harus URL http/https yang valid');
+            }
+            $clean['ollama_url'] = $value;
+        }
+
+        if (array_key_exists('ollama_model', $input)) {
+            $value = trim((string) $input['ollama_model']);
+            if ($value !== '' && preg_match('/^[A-Za-z0-9._:\/-]{1,80}$/', $value) !== 1) {
+                throw new \InvalidArgumentException('Nama model Ollama tidak valid');
+            }
+            $clean['ollama_model'] = $value;
+        }
+
+        if (array_key_exists('ollama_timeout', $input)) {
+            $value = (int) $input['ollama_timeout'];
+            if ($value < 5 || $value > 600) {
+                throw new \InvalidArgumentException('Nilai ollama_timeout harus di antara 5-600');
+            }
+            $clean['ollama_timeout'] = $value;
         }
 
         return $clean;

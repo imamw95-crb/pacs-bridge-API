@@ -17,7 +17,9 @@
   yang lebih lebar; di bawah 1180px otomatis satu kolom. Toolbar pencarian/tanggal study **sticky**
   di bawah header (offset dihitung dari tinggi header lewat CSS variable `--header-h`).
   Kartu study: thumbnail 178px, tombol biru **Lihat gambar** (selebar kartu), lalu
-  **ZIP (JPG)** / **ZIP (DICOM)** / **Viewer** sebaris; badge modalitas diisi modalitas
+  **ZIP (JPG)** / **ZIP (DICOM)** / **Viewer** sebaris; tombol **Draf AI** muncul di atasnya bila
+  Auto Expertise diaktifkan (panel draf + banner "wajib diverifikasi dokter", tombol
+  **Salin teks** / **Buat ulang** — lihat §6.10); badge modalitas diisi modalitas
   sebenarnya dari seri (mis. `US`, bukan selalu `DX`); thumbnail yang gagal dimuat menampilkan
   teks "gambar belum tersedia" (bukan kotak kosong),
 - daftar worklist + form kirim order + tombol hapus: order dirender sebagai **kartu bertumpuk**
@@ -139,3 +141,17 @@ Hal yang mudah salah:
   dihubungi dari bridge.
 - Membiarkan alat terdaftar tetapi **tidak** ada di `worklist_devices` membuat alat tidak muncul
   di pilihan **Alat / Station tujuan** form worklist.
+
+### 6.10 Tab Auto Expertise (Ollama) di Pengaturan
+
+Bagian **Pengaturan → Auto Expertise (Ollama)** mengatur draf bacaan AI untuk study:
+
+- saklar **Aktifkan tombol "Draf AI" di daftar study** (`ollama_enabled`),
+- **URL server Ollama** (`ollama_url`, mis. `http://192.168.0.9:11434`; default dibaca dari
+  `data/integrasiollama/ip ollama`), **Model vision** (`ollama_model`, default `qwen3.5:9b`),
+  dan **Timeout** (`ollama_timeout`, 5–600 detik),
+- tombol **Tes koneksi (nilai tersimpan)** memanggil `GET /ollama/status` dan menampilkan versi
+  server, daftar model vision, serta peringatan bila model aktif tidak punya capability `vision`.
+
+Setelah **Simpan**, dashboard memuat ulang status dan daftar study sehingga tombol **Draf AI**
+muncul/hilang sesuai saklar. Detail endpoint & perilaku: `docs/REF-API.md` §6.10.
