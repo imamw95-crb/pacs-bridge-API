@@ -35,6 +35,12 @@ services:
       TZ: Asia/Jakarta
       MALLOC_ARENA_MAX: "5"
       PYTHON_PLUGIN_ENABLED: "true"
+      # Tombol "Viewer" di dashboard membuka /stone-webviewer/index.html.
+      # Tanpa env ini plugin tidak dimuat → Orthanc balas 404 "Unknown resource".
+      # Binary-nya sudah ada di /usr/share/orthanc/plugins-available/ dan baru
+      # di-link ke plugins/ oleh entrypoint bila env ini true.
+      # Butuh plugin DICOMweb (aktif default di image orthancteam/orthanc).
+      STONE_WEB_VIEWER_PLUGIN_ENABLED: "true"
       SIMRS_WORKLIST_URL: ${SIMRS_WORKLIST_URL:-http://10.4.0.22/simrs/index.php/radiologi/api_worklist_dx/mwl_today}
       SIMRS_AUTH_USER: ${SIMRS_AUTH_USER:-}
       SIMRS_AUTH_PASS: ${SIMRS_AUTH_PASS:-}

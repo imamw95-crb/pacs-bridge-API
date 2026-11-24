@@ -365,6 +365,7 @@ Aturan pencocokan (sudah diuji):
 | 12 | `POST /modalities/{id}/get` (C-GET, Orthanc ≥ 1.12.6) menolak body `{"Level","Query"}` → **HTTP 400 tanpa pesan** | Tarik study dari PACS lain gagal | Kirim `{"Level":"Study","Resources":[{"StudyInstanceUID":"…"}],"Synchronous":false}` → dapat ID job |
 | 13 | Path REST **tidak** menerima DICOM UID di Orthanc 1.12.11: `GET /studies/1.2.840…` → **404** (hanya ID Orthanc yang diterima) | Link/endpoint berbasis StudyInstanceUID gagal | Petakan dulu lewat `POST /tools/lookup` (body = UID) → ambil `ID`, lihat `OrthancClient::lookup()` & `StudyService::findOneByKey()` |
 | 14 | `Modality` (0008,0060) tidak ada di `MainDicomTags` level **Study** (hanya level Series) | Semua study tampil sebagai `DX` | Ambil dari `POST /tools/find` level `Series` (`StudyDate` → peta `ParentStudy` ⇒ `Modality`) |
+| 15 | `GET /stone-webviewer/index.html` → **404** `{"OrthancStatus":17,"OrthancError":"Unknown resource"}` | Tombol **Viewer** di dashboard gagal (request tetap sampai ke Orthanc, jadi bukan masalah jaringan/nginx) | Plugin Stone Web Viewer belum dimuat. Di image `orthancteam/orthanc` binary-nya ada di `/usr/share/orthanc/plugins-available/libStoneWebViewer.so` dan baru di-link ke `plugins/` bila env `STONE_WEB_VIEWER_PLUGIN_ENABLED=true` → set di `deploy/orthanc/docker-compose.yml` lalu `sudo docker compose up -d` (container recreate → `/tmp/orthanc.json` digenerate ulang). Path tanpa `index.html` (`/stone-webviewer/`) tetap 404 |
 
 Catatan kode reject DICOM (PS3.8 tabel 9-21):
 
