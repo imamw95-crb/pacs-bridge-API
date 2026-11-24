@@ -4,6 +4,10 @@ Bridge PHP tanpa framework untuk menghubungkan **SIMRS** dengan server **Orthanc
 (Modality Worklist DICOM + retrieval study/gambar). Mendukung semua kode modality DICOM
 (**DX**, **CT**, **US**, **ECG**, **PX**, …) — nilai bawaan `DX`, bisa diubah per order.
 
+**Isi:** [Fitur](#fitur) · [Alur program](#alur-program) · [Auto expertise](#auto-expertise-ai-opsional) ·
+[Kebutuhan](#kebutuhan) · [Mulai cepat](#mulai-cepat) · [Dokumentasi](#dokumentasi) ·
+[Contoh singkat](#contoh-singkat-program) · [Uji](#uji) · [Keamanan](#keamanan) · [Struktur](#struktur)
+
 Alur lengkap (diagram Mermaid, otomatis dirender GitHub): lihat [Alur program](#alur-program).
 
 ## Fitur
@@ -27,15 +31,41 @@ Alur lengkap (diagram Mermaid, otomatis dirender GitHub): lihat [Alur program](#
 | **ZIP** DICOM & ZIP berisi JPG (folder = No. RM) | `/studies/{acc}/zip`, `/zip-jpg` |
 | Render / unduh satu instance | `GET /instances/{id}/jpg`, `GET /instances/{id}/file` |
 
-### Integrasi & operasional
+### Dashboard web (`/`)
+
+| Fitur | Keterangan |
+|---|---|
+| Statistik PACS | jumlah study, pasien, instance, dan order worklist |
+| Form order baru | No. RM, gelar, accession otomatis, pemeriksaan, modality, AET alat; nama dinormalisasi tanpa koma |
+| Daftar worklist | detail/ubah/hapus order + status order |
+| Study & Gambar | pencarian, tab per modality (otomatis dari alat), filter **Hari ini / Semua tanggal**, viewer (zoom, pan, layar penuh), unduh JPG / ZIP JPG / ZIP DICOM, tombol **Draf AI** (bila Auto Expertise aktif) |
+| Pengaturan (manager) | koneksi Orthanc, alat worklist (**Daftarkan ke Orthanc**, **Tes C-ECHO**), API bridge (generate/hapus + contoh curl/PHP/Python), callback, Auto Expertise (Ollama), akun saya, kelola user |
+| Indikator status | status koneksi Orthanc, ketersediaan worklist, dan peringatan password masih default |
+
+`public/dashboard.html` — tanpa build step; aset di `public/assets/`.
+
+### Akses & keamanan
 
 | Fitur | Endpoint utama |
 |---|---|
+| Login dashboard (peran **manager** / **operator**) + status sesi | `POST /login`, `GET /logout`, `GET /me` |
+| **API key** untuk program (kirim header `X-API-Key`) | `GET /settings/api-key` (**manager**) |
+| Ubah pengaturan (koneksi, alat, callback, Ollama) | `GET · PUT /settings` (PUT **manager**) |
+| Ganti password akun sendiri | `POST /settings/password` |
+| Kelola user dashboard (tambah, ubah peran, reset password, hapus) | `GET · POST /users`, `PUT · DELETE /users/{username}` (**manager**) |
+| **Audit log** setiap request + event aksi penting, dibaca petugas | `data/audit.log` (rotasi 5 MB), `GET /audit` (**manager**) |
+
+### Integrasi & operasional
+
+| Fitur | Endpoint / alat |
+|---|---|
 | **Callback** `study.received` ke SIMRS (HMAC `X-Bridge-Signature`, at-least-once) | `tools/notify-studies.php` |
 | Tarikan terjadwal study dari PACS sumber `SANTESRV1` (C-GET) | `tools/pull-santesrv1.php` |
-| **Audit log** siapa/kapan/order apa + `GET /audit` | `data/audit.log` |
+| Daftarkan alat baru ke Orthanc + uji **C-ECHO** (tanpa edit `orthanc.json`) | `GET /modalities`, `PUT /modalities/{aet}`, `POST /modalities/{aet}/echo` |
 | Health check Orthanc, worklist, dan versi bridge | `GET /health` |
-| Daftarkan alat baru ke Orthanc + uji **C-ECHO** dari dashboard (tanpa edit `orthanc.json`) | `GET /modalities`, `PUT /modalities/{aet}`, `POST /modalities/{aet}/echo` |
+| Adapter **CodeIgniter 3 & 4** (mode A lewat Bridge API / mode B langsung Orthanc) | `integrations/codeigniter/` |
+| Koleksi uji manual & probe DICOM | `postman/`, `bridge.http`, `dicom-probe.py` |
+| Deploy container + cron (container `pacs-bridge`) | `deploy/deploy.sh`, `deploy/README.md` |
 
 ### AI (opsional, LAN)
 
@@ -43,15 +73,6 @@ Alur lengkap (diagram Mermaid, otomatis dirender GitHub): lihat [Alur program](#
 |---|---|
 | **Draf expertise AI** dari satu gambar study (model vision Ollama, wajib verifikasi dokter) | `POST · GET /studies/{key}/expertise` |
 | Status server Ollama + model vision yang tersedia | `GET /ollama/status` |
-
-### Dashboard & akses
-
-| Fitur | Endpoint utama |
-|---|---|
-| Dashboard web: worklist, study + viewer, pengaturan, user, panel AI | `/` (`public/dashboard.html`) |
-| Autentikasi dashboard (peran **manager** / **operator**) + **API key** untuk program | `X-API-Key` |
-| Kelola user dashboard (tambah, ubah peran, reset password, hapus) | `/users` |
-| Pengaturan koneksi, alat worklist, callback, dan Ollama | `GET · PUT /settings` |
 
 ## Alur program
 
@@ -181,6 +202,7 @@ curl -H "X-API-Key: $KEY" http://127.0.0.1:8081/studies/A261105038/expertise    
 - PHP **8.2+** dengan ekstensi `curl`, `json`, `mbstring` (opsional `gd` + FreeType untuk watermark)
 - Tanpa Composer / tanpa framework
 - Orthanc PACS yang dapat dijangkau (REST + DICOM MWL)
+- Opsional: server **Ollama** (LAN) untuk draf expertise AI
 - Opsional: Docker (lihat `Dockerfile` & `deploy/`)
 
 ## Mulai cepat
@@ -192,6 +214,8 @@ notepad setting.txt        # IP/AET/port server Orthanc
 # 2) jalankan API (router wajib: path ber-titik seperti UID DICOM)
 php -S 0.0.0.0:8081 -t public public/router.php
 #    buka http://127.0.0.1:8081/  (login awal: admin / admin)
+
+# 3) di dashboard: ⚙ Pengaturan → aktifkan API key, lalu daftarkan alat di panel Alat Worklist
 ```
 
 Di Laragon: arahkan docroot ke folder `public/`.
@@ -226,6 +250,7 @@ curl -X POST http://127.0.0.1:8081/worklists \
        "accession_number":"A261105038","procedure":"THORAX PA","station_aet":"LEAD_CLIENT"}'
 
 curl -H "X-API-Key: $KEY" "http://127.0.0.1:8081/studies/A261105038/jpg?quality=90" -o hasil.jpg
+curl -H "X-API-Key: $KEY" "http://127.0.0.1:8081/worklists/A261105038/status"
 ```
 
 Semua endpoint **kecuali** `/login`, `/logout`, `/me`, dan halaman dashboard memerlukan
@@ -242,6 +267,9 @@ php tools/test-users.php   http://127.0.0.1:8081 admin admin
 php tools/test-expertise.php http://127.0.0.1:8081 <API_KEY>    # auto expertise (Ollama aktif)
 python dicom-probe.py 10.4.0.10 4242 ORTHANC LEAD_CLIENT   # C-ECHO / MWL / C-FIND
 ```
+
+Target semua skrip **0 fail** (jumlah pass & prasyarat env ada di [`AGENTS.md`](AGENTS.md) §6).
+Skrip uji membuat lalu menghapus datanya sendiri — jangan sampai meninggalkan order/user uji.
 
 ## Keamanan
 
@@ -266,5 +294,10 @@ tools/         self-test (order, user, API key, expertise), penarik study terjad
 docs/          rujukan REF-*.md + panduan API key tim SIMRS (PDF + HTML)
 deploy/        skrip deploy, cron, stack Orthanc (compose + systemd + nginx)
 data/          runtime: settings.json, audit.log, expertise/ (tidak di-commit)
+sessions/      runtime: sesi login PHP (dibuat otomatis, tidak di-commit)
 setting.txt    konfigurasi client (IP/AET/port)
+Dockerfile     image produksi (php:8.3-apache)
+postman/       koleksi + environment Postman
+bridge.http    contoh request REST Client
+dicom-probe.py uji C-ECHO / MWL / C-FIND
 ```

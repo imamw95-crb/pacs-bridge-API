@@ -81,6 +81,27 @@ PROMPT;
             }
         }
 
+        // Sebagian build Ollama (mis. 0.33.x) tidak mencantumkan `vision` di /api/tags
+        // untuk model tertentu (mis. medgemma) padahal /api/show menyebutnya — cek ulang
+        // khusus model aktif supaya `model_ready` tidak salah lapor.
+        if (!in_array($this->model, $vision, true)) {
+            foreach ($models as $i => $item) {
+                if ($item['name'] !== $this->model) {
+                    continue;
+                }
+                try {
+                    $caps = $this->request('POST', '/api/show', ['model' => $this->model])['capabilities'] ?? [];
+                    if (is_array($caps) && in_array('vision', $caps, true)) {
+                        $models[$i]['vision'] = true;
+                        $vision[] = $this->model;
+                    }
+                } catch (OllamaException $e) {
+                    // Model tetap dianggap non-vision bila /api/show gagal.
+                }
+                break;
+            }
+        }
+
         return [
             'reachable'     => true,
             'base_url'      => $this->baseUrl,

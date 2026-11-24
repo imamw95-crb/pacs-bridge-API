@@ -111,7 +111,7 @@ Override env: `PACS_SERVER_IP`, `PACS_HTTP_PORT`, `PACS_DICOM_PORT`, `PACS_CALLE
 - Study bisa **tanpa AccessionNumber** → `findOneByKey()` (acc → ID Orthanc → UID); dashboard memakai ID Orthanc.
 - Semua request dicatat `AuditLogger` (`data/audit.log`, rotasi 5 MB); `GET /audit` hanya manager.
 - Callback study baru: `tools/notify-studies.php` → `POST study.received` + HMAC `X-Bridge-Signature`, at-least-once (penerima wajib idempotent per `study_id`).
-- Auto expertise: `src/OllamaExpertise.php` (`POST /studies/{key}/expertise`) — render PNG 1024px **tanpa watermark** → model vision Ollama LAN (`format=json`, **`think=false`**), hasil = draf wajib verifikasi dokter, disimpan `data/expertise/{key}.json`. Nonaktif kecuali `ollama_enabled=true`.
+- Auto expertise: `src/OllamaExpertise.php` (`POST /studies/{key}/expertise`) — render PNG 1024px **tanpa watermark** → model vision Ollama LAN (`format=json`, **`think=false`**), hasil = draf wajib verifikasi dokter, disimpan `data/expertise/{key}.json`. Nonaktif kecuali `ollama_enabled=true`. Capability vision dibaca dari `/api/tags`, fallback `/api/show` untuk model aktif (mis. `medgemma:4b` di Ollama 0.33.x).
 
 ### Jangan
 

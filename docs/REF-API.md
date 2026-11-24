@@ -106,9 +106,10 @@ wajib diverifikasi dokter/radiolog, bukan diagnosis final.
 - URL bawaan dibaca dari `data/integrasiollama/ip ollama` (isi mis. `server Ollama 192.168.0.9`
   → `http://192.168.0.9:11434`). Override env: `PACS_OLLAMA_URL`, `PACS_OLLAMA_MODEL`,
   `PACS_OLLAMA_ENABLED`, `PACS_OLLAMA_TIMEOUT`.
-- Model wajib punya capability `vision` (`qwen3.5:9b`, `gemma4:12b` di server 192.168.0.9);
+- Model wajib punya capability `vision` (`qwen3.5:9b`, `gemma4:12b`, `medgemma:4b` di server 192.168.0.9);
   `GET /ollama/status` menampilkan `vision_models` dan `model_ready`. Model tanpa vision
-  menghasilkan draf kosong.
+  menghasilkan draf kosong. Capability dibaca dari `/api/tags`; bila model aktif tidak tercantum
+  (mis. `medgemma:4b` di Ollama 0.33.x), status mengecek ulang lewat `/api/show`.
 - `POST /studies/{key}/expertise` → `201` dengan `{study_key, model, prompt_version, duration_ms,
   parsed, draft:{kualitas, temuan_utama, temuan_lain, kesan, rekomendasi, keyakinan}, disclaimer}`.
   Draf disimpan di `data/expertise/{key}.json`; `GET` mengembalikan draf terakhir.
