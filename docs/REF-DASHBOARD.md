@@ -110,8 +110,10 @@ cukup dari **Pengaturan → Alat Worklist** (sesi **manager**):
    `PUT /modalities/{aet}`; bridge meneruskannya ke Orthanc `PUT /modalities/{id}` dengan flag
    `AllowFindWorklist` + `AllowStore` (+ `AllowFind`, `AllowEcho`, `AllowGet`, `AllowMove`).
    Badge berubah jadi **Terdaftar di Orthanc · IP:port · MWL · C-STORE**.
-3. Saat alat menyala, klik **Tes C-ECHO** → harus muncul "C-ECHO OK". Gagal = IP/port/AET salah
-   atau alat belum terhubung (bukan masalah MWL/SIMRS).
+3. Saat alat menyala, klik **Tes C-ECHO** → harus muncul "C-ECHO OK". Bila gagal, toast menampilkan
+   alasan dari Orthanc, mis. `DUL Association Rejected` (AET/IP/port tujuan bukan alat itu) atau
+   `connection refused` (port tertutup). Banyak workstation CR/DX hanya berperan sebagai SCU
+   (tanpa listener DICOM), jadi C-ECHO memang tidak bisa — MWL & C-STORE tetap normal.
 4. Kirim order uji dari form worklist lalu hapus ordernya.
 
 Endpoint (sesi manager, `X-API-Key` **ditolak 403**):

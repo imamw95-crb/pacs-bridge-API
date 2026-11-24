@@ -495,11 +495,13 @@ try {
         try {
             $result = $service->echo($m[1]);
         } catch (OrthancException $e) {
+            $reason = ModalityService::echoFailureReason((string) $e->responseBody);
             respondJson([
                 'aet'          => $m[1],
                 'echo'         => false,
                 'code'         => 'ECHO_FAILED',
-                'message'      => 'C-ECHO gagal — alat belum terjangkau atau AET/IP/port salah.',
+                'reason'       => $reason,
+                'message'      => 'C-ECHO ke ' . $m[1] . ' gagal: ' . $reason . '.',
                 'orthanc_body' => $e->responseBody,
             ], 502);
         }

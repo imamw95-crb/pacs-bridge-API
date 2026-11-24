@@ -132,6 +132,44 @@ final class ModalityService
     }
 
     /**
+     * Ringkas alasan kegagalan C-ECHO dari body error Orthanc agar bisa ditampilkan ke petugas.
+     *
+     * Contoh body:
+     * {"Details":"DicomAssociation - connecting to AET \"LEAD_CLIENT\": DUL Association Rejected"}
+     */
+    public static function echoFailureReason(string $body): string
+    {
+        $details = '';
+        $data = json_decode($body, true);
+        if (is_array($data)) {
+            $details = trim((string) ($data['Details'] ?? $data['Message'] ?? ''));
+        }
+        if ($details === '') {
+            $details = trim($body);
+        }
+        if ($details === '') {
+            return 'Orthanc tidak memberi detail';
+        }
+
+        $lower = strtolower($details);
+        $hints = [
+            'dul association rejected' => 'ditolak tujuan (DUL Association Rejected) — AET/IP/port tujuan bukan alat yang dituju',
+            'called ae title'          => 'AET tujuan tidak cocok (Called AE Title) — periksa AE Title alat',
+            'connection refused'       => 'port tujuan tertutup (connection refused) — periksa port DICOM alat',
+            'no route to host'         => 'IP tujuan tidak terjangkau (no route to host) — periksa IP/jaringan alat',
+            'timeout'                  => 'tidak ada jawaban sampai timeout — alat tidak merespons',
+            'unknown modality'         => 'AE Title belum terdaftar di Orthanc',
+        ];
+        foreach ($hints as $needle => $hint) {
+            if (str_contains($lower, $needle)) {
+                return $hint;
+            }
+        }
+
+        return $details;
+    }
+
+    /**
      * Gabungkan alat di Pengaturan dengan modality yang benar-benar terdaftar di Orthanc.
      *
      * @param list<array<string, mixed>> $devices

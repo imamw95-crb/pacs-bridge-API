@@ -1697,7 +1697,7 @@ let pendingClearCallback = false;
         await api('modalities/' + encodeURIComponent(aet) + '/echo', { method: 'POST' });
         toast('C-ECHO OK — ' + aet + ' terjangkau', 'ok');
       } catch (err) {
-        toast('C-ECHO gagal: ' + err.message, 'err');
+        toast(err.message, 'err');
       } finally {
         btn.disabled = false;
       }
