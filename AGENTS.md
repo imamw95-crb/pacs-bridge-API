@@ -39,7 +39,7 @@ Ringkas di bawah; tabel lengkap per file: `docs/REF-LINGKUNGAN.md` §2.
 | `public/index.php` | router REST API (semua endpoint + otorisasi) |
 | `public/dashboard.html` | dashboard web (login, worklist, study, pengaturan) — tanpa build step |
 | `public/router.php` | router `php -S` (path ber-titik/UID DICOM tidak 404) |
-| `tools/` | `selftest`, `test-api-key`, `test-order-flow`, `test-users`, `test-ci-integration`, `pull-santesrv1`, `notify-studies`, `agent-map` |
+| `tools/` | `selftest`, `test-api-key`, `test-order-flow`, `test-users`, `test-ci-integration`, `test-expertise`, `pull-santesrv1`, `notify-studies`, `agent-map` |
 | `deploy/` | `deploy.sh`, `cron-pacs-pull`, `cron-pacs-notify`, `nginx-pacs-bridge.conf`, `README.md`; `orthanc/` = stack compose Orthanc di server (container `orthanc` + `orthanc-proxy`) + unit systemd `orthanc-compose.service` & watchdog tiap 2 menit |
 | `integrations/codeigniter/` | adapter CI3 + CI4 (mode A Bridge API / mode B Orthanc) |
 | `docs/` | `REF-*.md` (detail AGENTS.md), `API-KEY-SIMRS.html/pdf` |

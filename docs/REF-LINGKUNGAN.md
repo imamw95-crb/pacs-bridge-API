@@ -44,7 +44,13 @@
 | `deploy/cron-pacs-notify` | jadwal cron tiap menit untuk `tools/notify-studies.php` |
 | `tools/test-users.php` | self-test peran user dashboard (manager vs operator), membuat & menghapus user uji |
 | `postman/` | **Postman collection + environment** untuk mencoba Bridge API secara manual (19 request) |
+| `README.md` | **ringkasan proyek**: tabel fitur per kategori (worklist, study/gambar, integrasi, AI, dashboard) + diagram alur Mermaid + mulai cepat/uji |
+| `AGENTS.md` | aturan kerja developer/agent (ringkas; detail di `docs/REF-*.md`) |
+| `tools/agent-map.php` | peta kelas/method per file + `--routes` (daftar endpoint) — dipakai agar konteks agent hemat |
+| `src/Version.php` | versi bridge (`1.3.0`), dikirim `/health` untuk verifikasi hasil deploy |
 | `API.md` | **dokumentasi REST API**: kemampuan, autentikasi, contoh respons, contoh konek (curl/PHP/CI/Python/Postman) |
+| `docs/API-KEY-SIMRS.html` | sumber HTML panduan API key SIMRS (`docs/API-KEY-SIMRS.pdf` dicetak ulang via Chrome headless — lihat `docs/REF-OPERASIONAL.md`) |
+| `deploy/orthanc/` | stack Orthanc di server: `docker-compose.yml` (container `orthanc` + `orthanc-proxy`), unit `orthanc-compose.service`, watchdog tiap 2 menit |
 | `docs/API-KEY-SIMRS.pdf` | **dokumentasi API key siap cetak untuk tim SIMRS**: cara dapat key, header, tabel endpoint (✅/❌), mode integrasi CI (PacsApi/Pacs_api vs langsung), error, keamanan, checklist go-live. Sumber: `docs/API-KEY-SIMRS.html` |
 | `integrations/codeigniter/` | library + config + controller untuk SIMRS (CI3 & CI4), lihat `README.md` di dalamnya |
 | `dicom-probe.py` | alat uji DICOM: C-ECHO, MWL C-FIND, Study Root C-FIND |

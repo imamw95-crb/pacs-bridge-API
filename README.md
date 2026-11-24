@@ -8,18 +8,50 @@ Alur lengkap (diagram Mermaid, otomatis dirender GitHub): lihat [Alur program](#
 
 ## Fitur
 
+### Worklist (MWL) & order
+
 | Fitur | Endpoint utama |
 |---|---|
-| Kirim order pasien ke **worklist (MWL)** — **idempotent** per accession | `POST /worklists` |
-| **Status order** untuk petugas (terkirim / diproses / gambar masuk / dibatalkan) | `GET /worklists/{acc}/status` |
+| Kirim order pasien ke **worklist (MWL)** — **idempotent** per accession (`201` baru / `200` sudah ada / `409` accession milik pasien lain) | `POST /worklists` |
+| Daftar, detail, ubah, dan hapus order | `GET /worklists`, `GET · PUT · DELETE /worklists/{id}` |
+| **Status order** untuk petugas (terkirim / diproses / gambar masuk / dibatalkan) + timeline audit | `GET /worklists/{acc}/status` |
 | Nomor `AccessionNumber` otomatis (format alat) | `GET /accession` |
-| Cari study (accession / No. RM / nama pasien) | `GET /studies`, `GET /studies/recent` |
-| Gambar **JPEG/PNG** (opsional ber-watermark identitas) | `/studies/{acc}/jpg`, `/png` |
+
+### Study & gambar
+
+| Fitur | Endpoint utama |
+|---|---|
+| Cari study (accession / No. RM / nama pasien) dan study terbaru per tanggal + modality | `GET /studies`, `GET /studies/recent` |
+| Daftar gambar (instance) sebuah study | `GET /studies/{acc}/images` |
+| Gambar **JPEG/PNG** (opsional ber-watermark identitas; USG & EKG tanpa watermark) | `/studies/{acc}/jpg`, `/png` |
 | **ZIP** DICOM & ZIP berisi JPG (folder = No. RM) | `/studies/{acc}/zip`, `/zip-jpg` |
-| **Callback** `study.received` ke SIMRS (HMAC, tanpa polling) | `tools/notify-studies.php` |
+| Render / unduh satu instance | `GET /instances/{id}/jpg`, `GET /instances/{id}/file` |
+
+### Integrasi & operasional
+
+| Fitur | Endpoint utama |
+|---|---|
+| **Callback** `study.received` ke SIMRS (HMAC `X-Bridge-Signature`, at-least-once) | `tools/notify-studies.php` |
+| Tarikan terjadwal study dari PACS sumber `SANTESRV1` (C-GET) | `tools/pull-santesrv1.php` |
 | **Audit log** siapa/kapan/order apa + `GET /audit` | `data/audit.log` |
-| Dashboard web: worklist, study, viewer, pengaturan | `/` (`public/dashboard.html`) |
-| Autentikasi dashboard (manager/operator) + **API key** untuk program | `X-API-Key` |
+| Health check Orthanc, worklist, dan versi bridge | `GET /health` |
+| Daftarkan alat baru ke Orthanc + uji **C-ECHO** dari dashboard (tanpa edit `orthanc.json`) | `GET /modalities`, `PUT /modalities/{aet}`, `POST /modalities/{aet}/echo` |
+
+### AI (opsional, LAN)
+
+| Fitur | Endpoint utama |
+|---|---|
+| **Draf expertise AI** dari satu gambar study (model vision Ollama, wajib verifikasi dokter) | `POST · GET /studies/{key}/expertise` |
+| Status server Ollama + model vision yang tersedia | `GET /ollama/status` |
+
+### Dashboard & akses
+
+| Fitur | Endpoint utama |
+|---|---|
+| Dashboard web: worklist, study + viewer, pengaturan, user, panel AI | `/` (`public/dashboard.html`) |
+| Autentikasi dashboard (peran **manager** / **operator**) + **API key** untuk program | `X-API-Key` |
+| Kelola user dashboard (tambah, ubah peran, reset password, hapus) | `/users` |
+| Pengaturan koneksi, alat worklist, callback, dan Ollama | `GET · PUT /settings` |
 
 ## Alur program
 
@@ -38,7 +70,7 @@ flowchart TB
 
     subgraph BRIDGE["Bridge API — public/index.php"]
         AUTH["Auth: sesi login / X-API-Key"]
-        SVC["WorklistService · StudyService · Settings"]
+        SVC["WorklistService · StudyService · ModalityService · OllamaExpertise · Settings"]
     end
 
     subgraph PACS["Orthanc PACS — 10.4.0.10"]
@@ -48,6 +80,10 @@ flowchart TB
     end
 
     MOD["Alat radiologi DX / US / ECG"]
+
+    subgraph AI["Ollama (LAN, opsional)"]
+        AIM[("model vision")]
+    end
 
     REG --> SDK
     REG --> CLI
@@ -59,6 +95,7 @@ flowchart TB
     REST --- IMG
     MWL <-->|"MWL C-FIND"| MOD
     MOD -->|"C-STORE gambar"| IMG
+    SVC -.->|"draf expertise"| AIM
 ```
 
 ### 2. Alur kirim order (worklist MWL)
@@ -114,12 +151,30 @@ sequenceDiagram
 - `POST /worklists` idempotent per `AccessionNumber` (retry aman; `409` bila accession milik pasien lain).
 - **Tanpa polling**: isi *Callback URL* + *Callback key* di Pengaturan → bridge mengirim
   `POST study.received` (HMAC `X-Bridge-Signature`) saat study baru stabil.
+- **Auto expertise (opsional)**: `POST /studies/{key}/expertise` membuat draf bacaan dari satu gambar
+  study lewat model vision Ollama di LAN; hasil disimpan sebagai draf dan wajib diverifikasi dokter.
 - Status order (`sent` / `taken` / `completed` / `cancelled`) tersedia di `GET /worklists/{acc}/status`.
 - Semua panggilan tercatat di audit log (`data/audit.log`, `GET /audit` untuk manager).
 - Alat mengirim gambar via C-STORE; entry worklist dihapus Orthanc setelah study stabil diterima.
 - Bridge **stateless** untuk gambar — render/arsip selalu diambil ulang dari Orthanc.
 - Kunci `{acc}` fleksibel: AccessionNumber, ID Orthanc, atau StudyInstanceUID (berguna untuk study USG tanpa accession).
 - Endpoint data butuh **sesi login** atau **`X-API-Key`**; lihat [docs/API-KEY-SIMRS.pdf](docs/API-KEY-SIMRS.pdf).
+
+## Auto expertise (AI, opsional)
+
+Draf bacaan otomatis untuk satu study memakai model **vision Ollama** di jaringan lokal:
+
+```bash
+KEY="<API_KEY>"
+curl -H "X-API-Key: $KEY" http://127.0.0.1:8081/ollama/status                  # reachable + model vision
+curl -X POST -H "X-API-Key: $KEY" http://127.0.0.1:8081/studies/A261105038/expertise
+curl -H "X-API-Key: $KEY" http://127.0.0.1:8081/studies/A261105038/expertise    # draf tersimpan
+```
+
+- Nonaktif secara bawaan (`ollama_enabled=false`); aktifkan di **Pengaturan → Auto Expertise (Ollama)**.
+- Server & model diatur lewat `ollama_url` / `ollama_model` (bawaan `qwen3.5:9b`) atau env `PACS_OLLAMA_*`.
+- Yang dikirim ke model: render PNG 1024px **tanpa watermark**, hanya ke Ollama di LAN — tidak ke internet.
+- Draf disimpan di `data/expertise/{key}.json` dan **wajib diverifikasi dokter**; bukan diagnosis.
 
 ## Kebutuhan
 
@@ -143,14 +198,16 @@ Di Laragon: arahkan docroot ke folder `public/`.
 
 Konfigurasi bisa dioverride lewat environment:
 `PACS_SERVER_IP`, `PACS_HTTP_PORT`, `PACS_DICOM_PORT`, `PACS_CALLED_AET`, `PACS_CALLING_AET`,
-`PACS_MODALITY`, `PACS_HTTP_USER`, `PACS_HTTP_PASS`, `PACS_BRIDGE_KEY`, `PACS_TIMEOUT`, `PACS_TIMEZONE`.
+`PACS_MODALITY`, `PACS_HTTP_USER`, `PACS_HTTP_PASS`, `PACS_BRIDGE_KEY`, `PACS_TIMEOUT`, `PACS_TIMEZONE`,
+`PACS_WATERMARK_FONT`, `PACS_CALLBACK_URL`, `PACS_CALLBACK_KEY`,
+`PACS_OLLAMA_ENABLED`, `PACS_OLLAMA_URL`, `PACS_OLLAMA_MODEL`, `PACS_OLLAMA_TIMEOUT`.
 
 ## Dokumentasi
 
 | Dokumen | Isi |
 |---|---|
 | [`API.md`](API.md) | referensi REST API: autentikasi, endpoint, contoh respons, contoh konek |
-| [`docs/API-KEY-SIMRS.pdf`](docs/API-KEY-SIMRS.pdf) | **panduan API key untuk tim SIMRS** (cetak): tabel endpoint ✅/❌, mode integrasi CI (`PacsApi`/`Pacs_api` vs langsung), error, checklist go-live |
+| [`docs/API-KEY-SIMRS.pdf`](docs/API-KEY-SIMRS.pdf) | **panduan API key untuk tim SIMRS** (cetak, sumber [`docs/API-KEY-SIMRS.html`](docs/API-KEY-SIMRS.html)): tabel endpoint ✅/❌, mode integrasi CI (`PacsApi`/`Pacs_api` vs langsung), error, checklist go-live |
 | [`integrations/codeigniter/README.md`](integrations/codeigniter/README.md) | library CodeIgniter 3 & 4 — **mode API** (lewat bridge, `X-API-Key`) atau langsung ke Orthanc |
 | [`PACS-ORTHANC.md`](PACS-ORTHANC.md) | catatan teknis server PACS (temuan & quirk) |
 | [`AGENTS.md`](AGENTS.md) | aturan kerja developer/agent (ringkas; detail di `docs/REF-*.md`) |
@@ -178,9 +235,11 @@ Semua endpoint **kecuali** `/login`, `/logout`, `/me`, dan halaman dashboard mem
 
 ```powershell
 php tools/selftest.php                    # end-to-end (membuat lalu menghapus entry uji)
+php tools/test-order-flow.php http://127.0.0.1:8081 <API_KEY>   # idempotensi, 409, status order, audit
 php tools/test-ci-integration.php         # library CI3 + CI4
 php tools/test-api-key.php http://127.0.0.1:8081 <API_KEY>
 php tools/test-users.php   http://127.0.0.1:8081 admin admin
+php tools/test-expertise.php http://127.0.0.1:8081 <API_KEY>    # auto expertise (Ollama aktif)
 python dicom-probe.py 10.4.0.10 4242 ORTHANC LEAD_CLIENT   # C-ECHO / MWL / C-FIND
 ```
 
@@ -193,15 +252,19 @@ python dicom-probe.py 10.4.0.10 4242 ORTHANC LEAD_CLIENT   # C-ECHO / MWL / C-FI
 - Batasi akses ke LAN/VPN dan gunakan **HTTPS** bila melewati jaringan luar.
 - Orthanc pada instalasi internal bisa berjalan tanpa autentikasi REST — batasi portnya di level jaringan.
 - Gambar JPG/PNG hasil render adalah **preview** (lossy, 8-bit), bukan citra diagnostik.
+- **Auto expertise** mengirim render gambar ke server Ollama di LAN — jangan arahkan `ollama_url` ke
+  layanan publik, dan perlakukan hasilnya sebagai **draf** yang harus diverifikasi dokter.
 
 ## Struktur
 
 ```
 public/        REST API (index.php), dashboard, router dev, aset
-src/           SDK: Config, OrthancClient, WorklistService, StudyService, Watermark, ZipWriter, Auth, Settings
-integrations/  adapter CodeIgniter 3 & 4
-tools/         self-test, penarik study terjadwal, uji API key/user
-docs/          dokumentasi API key (PDF + HTML)
-deploy/        Dockerfile, skrip deploy, cron
+src/           SDK Simrs\Pacs: Config, OrthancClient, WorklistService, StudyService, ModalityService,
+               WatermarkService, OllamaExpertise, ZipWriter, Auth, Settings, AuditLogger, Bridge, BridgeApiClient
+integrations/  adapter CodeIgniter 3 & 4 (mode API lewat bridge / langsung Orthanc)
+tools/         self-test (order, user, API key, expertise), penarik study terjadwal, worker callback, agent-map
+docs/          rujukan REF-*.md + panduan API key tim SIMRS (PDF + HTML)
+deploy/        skrip deploy, cron, stack Orthanc (compose + systemd + nginx)
+data/          runtime: settings.json, audit.log, expertise/ (tidak di-commit)
 setting.txt    konfigurasi client (IP/AET/port)
 ```

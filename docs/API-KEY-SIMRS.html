@@ -218,6 +218,9 @@ curl_close($ch);</code></pre>
     <tr><td>GET</td><td class="path">/instances/{id}/jpg?quality=</td><td>render 1 instance sebagai JPEG</td></tr>
     <tr><td>GET</td><td class="path">/instances/{id}/file</td><td>unduh 1 file DICOM</td></tr>
     <tr><td>GET</td><td class="path">/worklists/{acc}/status</td><td>status order: sent / taken / completed / cancelled</td></tr>
+    <tr><td>GET</td><td class="path">/studies/{acc}/expertise</td><td>draf expertise AI terakhir (<code>404</code> bila belum ada)</td></tr>
+    <tr><td>POST</td><td class="path">/studies/{acc}/expertise</td><td>buat draf expertise AI (Ollama vision; <code>503</code> bila fitur belum diaktifkan)</td></tr>
+    <tr><td>GET</td><td class="path">/ollama/status</td><td>status server Ollama + daftar model vision yang siap</td></tr>
     <tr><td>GET</td><td class="path">/settings</td><td>baca konfigurasi aktif — <b>tanpa</b> field <code>api_key</code> / <code>has_api_key</code></td></tr>
   </tbody>
 </table>
@@ -233,14 +236,18 @@ kecuali ganti password sendiri).</p>
     <tr><td>POST</td><td class="path">/settings/password</td><td><code>Harus login</code></td></tr>
     <tr><td>GET / POST</td><td class="path">/users</td><td><code>Hanya akun manager yang boleh mengelola user</code></td></tr>
     <tr><td>PUT / DELETE</td><td class="path">/users/{username}</td><td><code>Hanya akun manager yang boleh mengelola user</code></td></tr>
+    <tr><td>GET</td><td class="path">/modalities</td><td><code>Status dan pendaftaran modality hanya untuk sesi login manager</code></td></tr>
+    <tr><td>PUT</td><td class="path">/modalities/{aet}</td><td><code>Pendaftaran modality hanya untuk sesi login manager</code></td></tr>
+    <tr><td>POST</td><td class="path">/modalities/{aet}/echo</td><td><code>Uji C-ECHO hanya untuk sesi login manager</code></td></tr>
     <tr><td>GET</td><td class="path">/audit</td><td><code>Riwayat audit hanya bisa dibaca dengan sesi login manager</code></td></tr>
   </tbody>
 </table>
 
 <div class="callout">
-  <p><b>Ringkas:</b> semua endpoint <b>data</b> menerima API key. Hanya 4 kelompok <b>administratif</b> yang
-  menolaknya: <code>GET /settings/api-key</code>, <code>PUT /settings</code>,
-  <code>POST /settings/password</code>, dan <code>/users*</code>.</p>
+  <p><b>Ringkas:</b> semua endpoint <b>data</b> menerima API key. Yang menolaknya hanya kelompok
+  <b>administratif</b> (sesi login): <code>GET /settings/api-key</code>, <code>PUT /settings</code>,
+  <code>POST /settings/password</code>, <code>/users*</code>, <code>GET /audit</code>, dan
+  <code>/modalities*</code>.</p>
 </div>
 
 <h2>4. Hak akses per peran</h2>
@@ -255,6 +262,7 @@ kecuali ganti password sendiri).</p>
     <tr><td><code>PUT /settings</code> (ubah IP/port/AET)</td><td class="c tag-no">✘ 403</td><td class="c">✔</td><td class="c tag-no">✘ 403</td></tr>
     <tr><td><code>POST /settings/password</code> (akun sendiri)</td><td class="c tag-no">✘ 403</td><td class="c">✔</td><td class="c">✔</td></tr>
     <tr><td><code>/users*</code> (kelola user dashboard)</td><td class="c tag-no">✘ 403</td><td class="c">✔</td><td class="c tag-no">✘ 403</td></tr>
+    <tr><td><code>/modalities*</code> (status &amp; daftar alat ke Orthanc, C-ECHO)</td><td class="c tag-no">✘ 403</td><td class="c">✔</td><td class="c tag-no">✘ 403</td></tr>
     <tr><td><code>GET /audit</code> (riwayat audit)</td><td class="c tag-no">✘ 403</td><td class="c">✔</td><td class="c tag-no">✘ 403</td></tr>
     <tr><td><code>POST /login</code>, <code>POST /logout</code>, <code>GET /me</code></td><td class="c">publik</td><td class="c">publik</td><td class="c">publik</td></tr>
   </tbody>
@@ -422,6 +430,17 @@ curl -b cookies.txt "http://10.4.0.10/audit?event=worklist.delete"</code></pre>
 <p class="small muted">API key &amp; operator → <code>403</code>. File dirotasi otomatis pada 5 MB
 (<code>audit.log.1</code>) dan tidak pernah memuat nilai API key.</p>
 
+<h3>5.9 Draf expertise AI (opsional)</h3>
+<p>Bila manager mengaktifkan <b>Auto Expertise (Ollama)</b> di Pengaturan, bridge bisa membuat draf bacaan
+dari satu gambar study memakai model vision di jaringan lokal (bukan layanan internet):</p>
+<pre><code>curl -H "X-API-Key: $KEY" "$BASE/ollama/status"                       # reachable, vision_models, model_ready
+curl -X POST -H "X-API-Key: $KEY" "$BASE/studies/A261105038/expertise"
+curl -H "X-API-Key: $KEY" "$BASE/studies/A261105038/expertise"        # draf tersimpan</code></pre>
+<p class="small muted">Respons memuat <code>draft</code> (kesan, temuan utama/lain, rekomendasi, keyakinan)
+dan <code>disclaimer</code>. Hasil <b>wajib diverifikasi dokter</b> — bukan diagnosis. Citra dikirim ke model
+tanpa watermark dan hanya ke server Ollama di LAN. <code>503</code> bila fitur belum diaktifkan; panggilan
+pertama lebih lambat karena model dimuat.</p>
+
 <h2>6. Alur integrasi yang disarankan</h2>
 <ol>
   <li><b>Health check</b> saat SIMRS start / berkala: <code>GET /health</code> dengan key.
@@ -538,6 +557,12 @@ mis. <code>ACCESSION_CONFLICT</code>, <code>ORDER_NOT_FOUND</code>, <code>IMAGE_
     <tr><td class="path">GET /studies/{acc}/zip-jpg</td><td><code>quality</code>, <code>watermark=0</code> untuk mematikan</td><td><code>application/zip</code> (JPG)</td></tr>
     <tr><td class="path">GET /instances/{id}/jpg</td><td><code>quality</code></td><td>biner <code>image/jpeg</code></td></tr>
     <tr><td class="path">GET /instances/{id}/file</td><td>—</td><td><code>application/dicom</code></td></tr>
+    <tr><td class="path">GET /studies/{acc}/expertise</td><td>—</td><td><code>{study_key, model, draft, disclaimer}</code></td></tr>
+    <tr><td class="path">POST /studies/{acc}/expertise</td><td><code>model</code> (opsional)</td><td>201 + <code>{study_key, model, duration_ms, draft}</code></td></tr>
+    <tr><td class="path">GET /ollama/status</td><td>—</td><td><code>{enabled, reachable, vision_models, model_ready}</code></td></tr>
+    <tr><td class="path">GET /modalities</td><td>— (sesi manager)</td><td><code>{reachable, modalities, devices}</code></td></tr>
+    <tr><td class="path">PUT /modalities/{aet}</td><td><code>host?</code>, <code>port?</code> (sesi manager)</td><td><code>{registered, aet, configuration}</code></td></tr>
+    <tr><td class="path">POST /modalities/{aet}/echo</td><td>— (sesi manager)</td><td><code>{echo: true, result}</code> / <code>502</code></td></tr>
     <tr><td class="path">GET /settings</td><td>—</td><td>JSON <code>{settings, effective}</code></td></tr>
     <tr><td class="path">GET /settings/api-key</td><td>— (sesi manager)</td><td><code>{has_api_key, api_key}</code></td></tr>
     <tr><td class="path">PUT /settings</td><td>body konfigurasi (sesi manager)</td><td><code>{"saved": true}</code></td></tr>

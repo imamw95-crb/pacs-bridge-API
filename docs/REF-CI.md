@@ -17,6 +17,10 @@ dan `zipByAccession()`. Semua wrapper hanya memanggil service di `src/` (tidak a
 baru di adapter), sehingga perilakunya sama dengan REST API. Mode A memakai wrapper tipis di atas
 `Simrs\Pacs\BridgeApiClient` (bukan menulis cURL sendiri).
 
+> **Belum dibungkus adapter CI:** auto expertise dan pendaftaran modality. Bila dibutuhkan,
+> panggil `BridgeApiClient::expertiseStatus()`, `expertise()`, `createExpertise()` langsung dari
+> controller/service SIMRS (atau `POST /studies/{key}/expertise` via mode A).
+
 ### Aturan saat menyentuh kode integrasi
 
 1. **Jangan duplikasi logika HTTP** — mode B lewat `src/OrthancClient.php` + service `src/`;

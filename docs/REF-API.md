@@ -57,6 +57,7 @@ if ($img !== null) {
 | POST | `/logout` | keluar |
 | GET | `/me` | status sesi + `role` + `is_admin` |
 | GET/PUT | `/settings` | baca pengaturan (semua user) / ubah (**PUT hanya manager**) |
+| GET | `/settings/api-key` | API key aktif untuk program (**manager**; operator & `X-API-Key` → `403`) |
 | POST | `/settings/password` | ganti password akun sendiri (`{current_password,new_password}`) |
 | GET | `/users` | daftar user dashboard (**manager**) |
 | POST | `/users` | tambah user `{username,password,role}` (**manager**) |
@@ -78,10 +79,10 @@ if ($img !== null) {
 | GET | `/studies?patient_id=...` | cari study per pasien |
 | GET | `/studies?name=...` | cari study per **nama pasien** (parsial, wildcard `*KATA*KATA*`, maks 50 study terbaru; alias `patient_name`) |
 | GET | `/studies/recent?date=20261113&limit=12&modality=US` | study per tanggal (`date=today\|all\|YYYYMMDD`); `modality` = kode DICOM (`US` = USG, `DX` = rontgen, `CT` = CT scan, `ECG` = EKG, `PX` = panoramic gigi, kosong/`all` = semua); default tanggal dari `study_filter` |
-| GET | `/studies/{acc}/jpg?quality=90` | gambar JPEG (fallback PNG bila SOPInstanceUID ambigu); `&watermark=1` = ber-watermark (dilewati untuk modalitas US) |
+| GET | `/studies/{acc}/jpg?quality=90` | gambar JPEG (fallback PNG bila SOPInstanceUID ambigu); `&watermark=1` = ber-watermark (dilewati untuk modalitas US & ECG) |
 | GET | `/studies/{acc}/png?width=1024` | gambar PNG (bisa resize) |
 | GET | `/studies/{acc}/zip` | ZIP seluruh study (DICOM) |
-| GET | `/studies/{acc}/zip-jpg?quality=90` | ZIP berisi JPG **ber-watermark**, folder = No. RM (`watermark=0` untuk mematikan; modalitas US selalu tanpa watermark) |
+| GET | `/studies/{acc}/zip-jpg?quality=90` | ZIP berisi JPG **ber-watermark**, folder = No. RM (`watermark=0` untuk mematikan; modalitas US & ECG selalu tanpa watermark) |
 | GET | `/studies/{acc}/images` | daftar instance/gambar study |
 | GET | `/studies/{acc}/expertise` | draf expertise AI terakhir (`data/expertise/{key}.json`; `404` bila belum ada) |
 | POST | `/studies/{acc}/expertise` | buat draf expertise AI (model vision Ollama; body opsional `{"model":"qwen3.5:9b"}`; `503` bila `ollama_enabled=false`) |
