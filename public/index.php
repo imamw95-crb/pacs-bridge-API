@@ -800,7 +800,11 @@ try {
         }
         $studyId = (string) ($study['ID'] ?? '');
         $accession = (string) ($study['MainDicomTags']['AccessionNumber'] ?? '');
-        $filename = ($accession !== '' ? $accession : $m[1]) . '.zip';
+        $patientId = (string) ($study['PatientMainDicomTags']['PatientID'] ?? '');
+        // Nama file unduhan: No. RM lebih berguna daripada ID Orthanc; header
+        // Content-Disposition mengalahkan atribut `download` di browser.
+        $fileBase = $accession !== '' ? $accession : ($patientId !== '' ? $patientId : $m[1]);
+        $filename = $fileBase . '.zip';
 
         // Arsip CT bisa >100 MB: alirkan langsung dari Orthanc, jangan ditampung
         // di memori PHP (memory_limit default 128 MB) dan jangan kena batas 30 detik.

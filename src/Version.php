@@ -10,5 +10,5 @@ namespace Simrs\Pacs;
  */
 final class Version
 {
-    public const VERSION = '1.3.2';
+    public const VERSION = '1.3.3';
 }

@@ -259,7 +259,7 @@ Respons `200` (contoh nyata dari server produksi):
         "count": 3,
         "error": null
     },
-    "bridge_version": "1.3.2",
+    "bridge_version": "1.3.3",
     "server_time": "2026-11-19T11:55:29+07:00"
 }
 ```
@@ -620,8 +620,10 @@ Lebih stabil dibanding JPEG karena memakai renderer native Orthanc.
 
 #### `GET /studies/{accession}/zip`
 
-`Content-Type: application/zip` + `Content-Disposition: inline; filename="<accession>.zip"`.
-Isi: seluruh instance DICOM study tersebut.
+`Content-Type: application/zip` + `Content-Disposition: inline; filename="<accession|No. RM>.zip"`.
+Isi: seluruh instance DICOM study tersebut. Nama file memakai AccessionNumber; bila study
+tidak punya accession (mis. CT), dipakai **No. RM** pasien, lalu ID Orthanc sebagai
+fallback terakhir.
 
 Arsip **dialirkan langsung** dari Orthanc ke klien (bukan ditampung di memori PHP) dan
 tanpa batas `max_execution_time`, karena study CT bisa berisi ratusan slice (>100 MB).
