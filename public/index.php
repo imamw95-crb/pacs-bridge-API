@@ -770,6 +770,9 @@ try {
 
     if (preg_match('#^/studies/([A-Za-z0-9\-.]+)/zip-jpg$#', $path, $m)) {
         auditAccession($m[1]);
+        // Study CT berisi ratusan slice: render + watermark semua gambar bisa
+        // melewati max_execution_time default PHP (30 detik).
+        set_time_limit(0);
         $quality = max(1, min(100, (int) ($query['quality'] ?? 90)));
         $watermark = !array_key_exists('watermark', $query) || isTruthy($query['watermark']);
 
@@ -797,11 +800,41 @@ try {
         }
         $studyId = (string) ($study['ID'] ?? '');
         $accession = (string) ($study['MainDicomTags']['AccessionNumber'] ?? '');
-        respondBinary(
-            $bridge->studies()->archiveStudy($studyId),
-            'application/zip',
-            ($accession !== '' ? $accession : $m[1]) . '.zip'
-        );
+        $filename = ($accession !== '' ? $accession : $m[1]) . '.zip';
+
+        // Arsip CT bisa >100 MB: alirkan langsung dari Orthanc, jangan ditampung
+        // di memori PHP (memory_limit default 128 MB) dan jangan kena batas 30 detik.
+        set_time_limit(0);
+        $started = false;
+        try {
+            $bridge->studies()->streamArchive(
+                $studyId,
+                static function (string $chunk): void {
+                    echo $chunk;
+                    if (ob_get_level() > 0) {
+                        ob_flush();
+                    }
+                    flush();
+                },
+                static function (int $status, string $contentType, ?int $contentLength) use (&$started, $filename): void {
+                    http_response_code(200);
+                    header('Content-Type: ' . ($contentType !== '' ? $contentType : 'application/zip'));
+                    if ($contentLength !== null && $contentLength > 0) {
+                        header('Content-Length: ' . $contentLength);
+                    }
+                    header('Content-Disposition: inline; filename="' . $filename . '"');
+                    $started = true;
+                }
+            );
+        } catch (OrthancException $e) {
+            if ($started) {
+                // Header + sebagian arsip sudah terkirim; tidak bisa diganti JSON.
+                exit;
+            }
+
+            throw $e;
+        }
+        exit;
     }
 
     if (preg_match('#^/studies/([A-Za-z0-9\-.]+)/expertise$#', $path, $m)) {

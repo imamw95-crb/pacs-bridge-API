@@ -187,6 +187,7 @@ Di Laragon: docroot → folder `public/`.
 - **Jangan menebak AET/port alat** — uji dengan `dicom-probe.py` (`AC` benar, `RJ 0x03/0x07` salah); jangan isi IP server sebagai IP alat.
 - **Model Ollama tak ikut deploy** — `ollama_model` ada di `data/settings.json` (runtime, di luar paket); ubah via dashboard → Auto Expertise atau edit di server.
 - **`/api/tags` bisa tak lengkap** — Ollama 0.33.x tak menyebut `vision` untuk `medgemma:4b`; `status()` fallback ke `/api/show`. Cek `/ollama/status` dulu.
+- **ZIP study CT besar** — `/studies/{key}/zip` **dialirkan** (`streamArchive()`, memori ±2 MB) dan `/zip-jpg` memakai `set_time_limit(0)`; jangan kembalikan ke `archiveStudy()`/`respondBinary()` (arsip CT >100 MB → `memory_limit` 128 MB habis, ZIP JPG >30 detik → fatal).
 - **Semua fitur = REST API** — dashboard `api()` + sesi, SIMRS `BridgeApiClient` + `X-API-Key`; worker cron pakai SDK langsung (jangan bikin endpoint baru).
 - **Verifikasi live** — versi dari `<meta name="bridge-version">` di `/dashboard`; `/audit` tanpa sesi harus `401 UNAUTHORIZED`.
 - **Prioritas config** — env `PACS_*` > `setting.txt` > `data/settings.json`; cek nilai efektif dengan `Config::load()`.

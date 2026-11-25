@@ -429,6 +429,105 @@ final class OrthancClient
     }
 
     /**
+     * Alirkan body biner Orthanc per potongan tanpa menampung seluruh respons
+     * di memori (arsip ZIP study CT bisa >100 MB, melebihi memory_limit 128 MB).
+     *
+     * Callback `$onStart` hanya dipanggil untuk respons 2xx, sehingga pemanggil
+     * masih bisa mengirim header sendiri sebelum byte pertama. Body respons
+     * error ditampung kecil lalu dilempar sebagai OrthancException.
+     *
+     * @param callable(string):void $onChunk
+     * @param (callable(int, string, ?int):void)|null $onStart status, content-type, content-length
+     * @return array{status: int, content_type: string, content_length: ?int}
+     */
+    public function streamBinary(string $path, callable $onChunk, ?callable $onStart = null): array
+    {
+        $url = $this->baseUrl . $path;
+        $ch = curl_init($url);
+        if ($ch === false) {
+            throw new OrthancException('Gagal membuat handle cURL');
+        }
+
+        $status = 0;
+        $contentType = '';
+        $contentLength = null;
+        $errorBody = '';
+        $headersDone = false;
+
+        $options = [
+            CURLOPT_CUSTOMREQUEST  => 'GET',
+            CURLOPT_RETURNTRANSFER => false,
+            // Arsip study besar butuh lebih dari timeout REST biasa (default 30 detik).
+            CURLOPT_TIMEOUT        => max(300, $this->timeout),
+            CURLOPT_CONNECTTIMEOUT => min(10, $this->timeout),
+            CURLOPT_HTTPHEADER     => ['Accept: */*'],
+            CURLOPT_HEADERFUNCTION => static function ($ch, string $line) use (
+                &$status,
+                &$contentType,
+                &$contentLength,
+                &$headersDone,
+                $onStart
+            ): int {
+                if (preg_match('#^HTTP/\S+\s+(\d+)#', $line, $m) === 1) {
+                    $status = (int) $m[1];
+                    $headersDone = false;
+                } elseif (preg_match('#^Content-Type:\s*(.+)$#i', $line, $m) === 1) {
+                    $contentType = trim($m[1]);
+                } elseif (preg_match('#^Content-Length:\s*(\d+)#i', $line, $m) === 1) {
+                    $contentLength = (int) $m[1];
+                } elseif (trim($line) === '' && !$headersDone) {
+                    $headersDone = true;
+                    if ($status >= 200 && $status < 300 && $onStart !== null) {
+                        $onStart($status, $contentType, $contentLength);
+                    }
+                }
+
+                return strlen($line);
+            },
+            CURLOPT_WRITEFUNCTION  => static function ($ch, string $chunk) use (&$status, &$errorBody, $onChunk): int {
+                $length = strlen($chunk);
+                if ($status >= 400) {
+                    if (strlen($errorBody) < 65536) {
+                        $errorBody .= $chunk;
+                    }
+
+                    return $length;
+                }
+
+                $onChunk($chunk);
+
+                return $length;
+            },
+        ];
+
+        if ($this->user !== null) {
+            $options[CURLOPT_USERPWD] = $this->user . ':' . ($this->password ?? '');
+        }
+
+        curl_setopt_array($ch, $options);
+        $ok = curl_exec($ch);
+        $error = curl_error($ch);
+        curl_close($ch);
+
+        if ($status >= 400) {
+            throw new OrthancException(
+                sprintf('Orthanc GET %s -> HTTP %d', $path, $status),
+                $status,
+                $errorBody
+            );
+        }
+        if ($ok === false) {
+            throw new OrthancException(sprintf('Koneksi ke Orthanc gagal (%s): %s', $url, $error));
+        }
+
+        return [
+            'status'         => $status,
+            'content_type'   => $contentType,
+            'content_length' => $contentLength,
+        ];
+    }
+
+    /**
      * @param array<string, mixed>|null $body
      * @return array<string, mixed>
      */

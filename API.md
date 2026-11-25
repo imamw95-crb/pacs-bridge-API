@@ -257,7 +257,7 @@ Respons `200` (contoh nyata dari server produksi):
         "count": 3,
         "error": null
     },
-    "bridge_version": "1.3.0",
+    "bridge_version": "1.3.1",
     "server_time": "2026-11-19T11:55:29+07:00"
 }
 ```
@@ -618,8 +618,13 @@ Lebih stabil dibanding JPEG karena memakai renderer native Orthanc.
 
 #### `GET /studies/{accession}/zip`
 
-`Content-Type: application/zip` + `Content-Disposition: attachment; filename="<accession>.zip"`.
+`Content-Type: application/zip` + `Content-Disposition: inline; filename="<accession>.zip"`.
 Isi: seluruh instance DICOM study tersebut.
+
+Arsip **dialirkan langsung** dari Orthanc ke klien (bukan ditampung di memori PHP) dan
+tanpa batas `max_execution_time`, karena study CT bisa berisi ratusan slice (>100 MB).
+Jangan mengubahnya menjadi `archiveStudy()` (menampung seluruh ZIP di string) — dengan
+`memory_limit` default 128 MB unduhan CT akan gagal `Allowed memory size exhausted`.
 
 #### `GET /studies/{accession}/zip-jpg?quality=90[&watermark=0]`
 
@@ -643,6 +648,9 @@ A050956/
 - **Watermark aktif secara default.** Kirim `watermark=0` (atau `false`) untuk ZIP tanpa
   watermark. Untuk study **modalitas US (USG) dan ECG (EKG)** watermark selalu dilewati,
   karena citra sudah memuat identitas pasien dari alat.
+- Study CT besar (ratusan slice) perlu merender + memberi watermark semua gambar, bisa
+  **>30 detik**; endpoint ini menonaktifkan `max_execution_time` agar tidak gagal di tengah
+  jalan. Batas waktu proxy di host (nginx/lighttpd) harus ≥ 120 detik.
 - Arsip dibuat di memori oleh bridge (`src/ZipWriter.php`, metode *store*, tanpa
   ekstensi PHP `zip`/`zlib`); watermark memakai `src/WatermarkService.php` (GD + FreeType).
 

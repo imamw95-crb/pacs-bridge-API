@@ -95,6 +95,10 @@ Catatan: pada semua endpoint study, `{acc}` boleh berisi **AccessionNumber**, **
 mengirim study **tanpa AccessionNumber**; dashboard memakai ID Orthanc untuk study seperti
 itu supaya gambar/ZIP tetap bisa diambil.
 
+Catatan CT: `/zip` mengalirkan arsip Orthanc per potongan (tanpa menampung di memori) dan
+`/zip-jpg` menonaktifkan `max_execution_time`, karena satu study CT bisa berisi ratusan
+slice (arsip DICOM >100 MB, render JPG >30 detik).
+
 ### 6.10 Auto expertise (draf AI lewat Ollama)
 
 Draf bacaan dari **satu gambar** study (render PNG 1024px, **tanpa watermark** — identitas pasien

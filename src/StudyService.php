@@ -900,6 +900,20 @@ final class StudyService
     }
 
     /**
+     * Alirkan arsip DICOM satu study langsung dari Orthanc per potongan.
+     *
+     * Study CT berisi ratusan slice sehingga ZIP bisa >100 MB; menampungnya
+     * utuh di memori menembus memory_limit PHP (128 MB) dan unduhan gagal.
+     *
+     * @param callable(string):void $onChunk
+     * @param (callable(int, string, ?int):void)|null $onStart status, content-type, content-length
+     */
+    public function streamArchive(string $studyId, callable $onChunk, ?callable $onStart = null): void
+    {
+        $this->client->streamBinary('/studies/' . rawurlencode($studyId) . '/archive', $onChunk, $onStart);
+    }
+
+    /**
      * Nama file unik di dalam satu ZIP.
      *
      * SeriesNumber sering sama untuk semua seri (mis. semuanya "1") dan

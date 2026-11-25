@@ -47,7 +47,7 @@
 | `README.md` | **ringkasan proyek**: tabel fitur per kategori (worklist, study/gambar, integrasi, AI, dashboard) + diagram alur Mermaid + mulai cepat/uji |
 | `AGENTS.md` | aturan kerja developer/agent (ringkas; detail di `docs/REF-*.md`) |
 | `tools/agent-map.php` | peta kelas/method per file + `--routes` (daftar endpoint) — dipakai agar konteks agent hemat |
-| `src/Version.php` | versi bridge (`1.3.0`), dikirim `/health` untuk verifikasi hasil deploy |
+| `src/Version.php` | versi bridge (`1.3.1`), dikirim `/health` untuk verifikasi hasil deploy |
 | `API.md` | **dokumentasi REST API**: kemampuan, autentikasi, contoh respons, contoh konek (curl/PHP/CI/Python/Postman) |
 | `docs/API-KEY-SIMRS.html` | sumber HTML panduan API key SIMRS (`docs/API-KEY-SIMRS.pdf` dicetak ulang via Chrome headless — lihat `docs/REF-OPERASIONAL.md`) |
 | `deploy/orthanc/` | stack Orthanc di server: `docker-compose.yml` (container `orthanc` + `orthanc-proxy`), unit `orthanc-compose.service`, watchdog tiap 2 menit |
