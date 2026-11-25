@@ -178,7 +178,7 @@ sequenceDiagram
 - Semua panggilan tercatat di audit log (`data/audit.log`, `GET /audit` untuk manager).
 - Alat mengirim gambar via C-STORE; entry worklist dihapus Orthanc setelah study stabil diterima.
 - Bridge **stateless** untuk gambar — render/arsip selalu diambil ulang dari Orthanc.
-- Kunci `{acc}` fleksibel: AccessionNumber, ID Orthanc, atau StudyInstanceUID (berguna untuk study USG tanpa accession).
+- Kunci `{acc}` fleksibel: AccessionNumber, ID Orthanc, StudyInstanceUID, atau No. RM/PatientID (berguna untuk study CT & USG tanpa accession; No. RM = study terbaru pasien).
 - Endpoint data butuh **sesi login** atau **`X-API-Key`**; lihat [docs/API-KEY-SIMRS.pdf](docs/API-KEY-SIMRS.pdf).
 
 ## Auto expertise (AI, opsional)

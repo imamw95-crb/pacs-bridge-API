@@ -184,9 +184,11 @@ langsung dari Orthanc saat dipanggil (stateless).
 
 > **Kunci study (`{acc}`) fleksibel.** Pada semua endpoint study, `{acc}` boleh berisi
 > **AccessionNumber**, **ID Orthanc** (mis. `142ca2db-e3ae40d0-e9b328a0-6a77ec35-80702d8c`),
-> atau **StudyInstanceUID** (`1.2.840.113619...`). Ini perlu karena sebagian alat
-> (mis. workstation USG) mengirim study **tanpa AccessionNumber**; dashboard memakai
-> ID Orthanc untuk study seperti itu supaya gambar & ZIP tetap bisa diambil.
+> **StudyInstanceUID** (`1.2.840.113619...`), atau **No. RM / PatientID** (mis. `A050109`).
+> Ini perlu karena sebagian alat (mis. CT scan & workstation USG) mengirim study **tanpa
+> AccessionNumber**; dashboard memakai ID Orthanc, sedangkan SIMRS bisa memakai No. RM.
+> Bila satu No. RM punya beberapa study, yang diambil adalah **study terbaru** (urut
+> StudyDate + StudyTime); pakai AccessionNumber/StudyInstanceUID untuk study tertentu.
 
 ---
 
@@ -257,7 +259,7 @@ Respons `200` (contoh nyata dari server produksi):
         "count": 3,
         "error": null
     },
-    "bridge_version": "1.3.1",
+    "bridge_version": "1.3.2",
     "server_time": "2026-11-19T11:55:29+07:00"
 }
 ```
@@ -1020,7 +1022,7 @@ Server tidak terjangkau → tetap `200` dengan `reachable:false` + `error` (dipa
 
 #### `POST /studies/{key}/expertise`
 
-`{key}` = AccessionNumber, ID Orthanc, atau StudyInstanceUID. Body opsional:
+`{key}` = AccessionNumber, ID Orthanc, StudyInstanceUID, atau No. RM (study terbaru). Body opsional:
 `{"model":"gemma4:12b"}` (default `ollama_model`).
 
 `201`:

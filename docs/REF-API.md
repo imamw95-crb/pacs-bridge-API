@@ -91,9 +91,10 @@ if ($img !== null) {
 | GET | `/instances/{id}/file` | 1 file DICOM |
 
 Catatan: pada semua endpoint study, `{acc}` boleh berisi **AccessionNumber**, **ID Orthanc**
-(`142ca2db-e3ae40d0-...`), atau **StudyInstanceUID**. Alat tertentu (mis. workstation USG)
-mengirim study **tanpa AccessionNumber**; dashboard memakai ID Orthanc untuk study seperti
-itu supaya gambar/ZIP tetap bisa diambil.
+(`142ca2db-e3ae40d0-...`), **StudyInstanceUID**, atau **No. RM / PatientID** (mis. `A050109`).
+Alat tertentu (CT scan & workstation USG) mengirim study **tanpa AccessionNumber**;
+dashboard memakai ID Orthanc, sedangkan SIMRS dapat memakai No. RM. Bila No. RM punya
+beberapa study, `findOneByKey()` memilih **study terbaru** (StudyDate + StudyTime menurun).
 
 Catatan CT: `/zip` mengalirkan arsip Orthanc per potongan (tanpa menampung di memori) dan
 `/zip-jpg` menonaktifkan `max_execution_time`, karena satu study CT bisa berisi ratusan

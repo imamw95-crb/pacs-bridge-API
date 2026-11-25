@@ -94,12 +94,13 @@ final class StudyService
     }
 
     /**
-     * Cari satu study dari kunci apa pun: AccessionNumber, ID Orthanc, atau
-     * DICOM UID (StudyInstanceUID / SeriesInstanceUID / SOPInstanceUID).
+     * Cari satu study dari kunci apa pun: AccessionNumber, ID Orthanc,
+     * DICOM UID (StudyInstanceUID / SeriesInstanceUID / SOPInstanceUID), atau
+     * No. RM (PatientID — diambil study **terbaru** pasien).
      *
-     * Diperlukan karena sebagian alat (mis. workstation USG) mengirim study
-     * tanpa AccessionNumber, sehingga study seperti itu tidak bisa diakses
-     * lewat nomor accession.
+     * Diperlukan karena sebagian alat (mis. CT scan & workstation USG) mengirim
+     * study tanpa AccessionNumber, sehingga SIMRS mengunduh gambar/ZIP memakai
+     * No. RM.
      *
      * @return array<string, mixed>|null
      */
@@ -119,8 +120,11 @@ final class StudyService
         }
 
         $studies = $this->findByAccession($key);
+        if ($studies !== []) {
+            return $studies[0];
+        }
 
-        return $studies[0] ?? null;
+        return $this->findByPatientId($key, 1)[0] ?? null;
     }
 
     /**
